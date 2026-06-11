@@ -1,0 +1,241 @@
+{% extends "shared/base.html" %}
+{% block title %}Register Patient{% endblock %}
+{% block page_title %}Register New Patient{% endblock %}
+{% block extra_head %}
+<style>
+.section-card{border-radius:12px;border:1px solid #e5e7eb;padding:20px;margin-bottom:20px;background:#fff;}
+.section-title{font-size:.95rem;font-weight:700;color:#1a3a5c;border-bottom:2px solid #dbeafe;padding-bottom:8px;margin-bottom:16px;}
+.form-label{font-size:.82rem;font-weight:600;color:#374151;margin-bottom:4px;}
+.form-control,.form-select{font-size:.875rem;border-radius:8px;}
+.photo-preview{width:120px;height:140px;border-radius:10px;object-fit:cover;border:2px solid #e5e7eb;}
+.photo-placeholder{width:120px;height:140px;border-radius:10px;background:#f3f4f6;border:2px dashed #d1d5db;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;color:#9ca3af;}
+.required-star{color:#dc3545;}
+</style>
+{% endblock %}
+{% block content %}
+<form method="POST" enctype="multipart/form-data" id="registerForm">
+<div class="row g-3">
+
+  <!-- Basic Info -->
+  <div class="col-lg-8">
+    <div class="section-card">
+      <div class="section-title"><i class="fa fa-user-circle me-2"></i>Patient Identity</div>
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">Patient ID <span class="required-star">*</span></label>
+          <input type="text" class="form-control" name="patient_id" placeholder="e.g. PAT-001" required style="text-transform:uppercase;"/>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Full Name <span class="required-star">*</span></label>
+          <input type="text" class="form-control" name="name" placeholder="John Doe" required/>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Age</label>
+          <input type="number" class="form-control" name="age" min="1" max="120" value="45"/>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Gender</label>
+          <select class="form-select" name="gender">
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Ward Type</label>
+          <select class="form-select" name="ward_type">
+            <option value="General">General</option>
+            <option value="ICU">ICU</option>
+            <option value="Emergency">Emergency</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Infection Type</label>
+          <select class="form-select" name="infection_type">
+            <option value="Bloodstream">Bloodstream</option>
+            <option value="Pneumonia">Pneumonia</option>
+            <option value="Respiratory">Respiratory</option>
+            <option value="UTI">UTI</option>
+            <option value="Wound">Wound</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Pathogen Type</label>
+          <select class="form-select" name="pathogen_type">
+            <option value="MRSA">MRSA</option>
+            <option value="E. coli">E. coli</option>
+            <option value="Klebsiella">Klebsiella</option>
+            <option value="Acinetobacter">Acinetobacter</option>
+            <option value="Pseudomonas">Pseudomonas</option>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Assigned Doctor <span class="required-star">*</span></label>
+          <select class="form-select" name="assigned_doctor" required>
+            <option value="">-- Select Doctor --</option>
+            {% for doc in doctors %}
+              <option value="{{ doc.username }}" {% if doc.username == current_user.username or (current_user.role == 'doctor' and doc.username == current_user.username) %}selected{% endif %}>
+                {{ doc.name }} ({{ doc.username }})
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Link Patient User Account</label>
+          <select class="form-select" name="assigned_user">
+            <option value="">-- No linked account --</option>
+            {% for u in patient_users %}
+              <option value="{{ u.username }}">{{ u.name }} ({{ u.username }})</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hospital & Treatment -->
+    <div class="section-card">
+      <div class="section-title"><i class="fa fa-hospital me-2"></i>Hospital & Treatment History</div>
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">Length of Hospital Stay (days)</label>
+          <input type="number" class="form-control" name="length_of_hospital_stay" value="7" min="0"/>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Number of Antibiotics Used</label>
+          <input type="number" class="form-control" name="number_of_antibiotics_used" value="2" min="0"/>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Duration of Antibiotic Use (days)</label>
+          <input type="number" class="form-control" name="duration_of_antibiotic_use" value="5" min="0"/>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">WBC Count (cells/μL)</label>
+          <input type="number" class="form-control" name="white_blood_cell_count" step="1" value="7500"/>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">C-Reactive Protein (mg/L)</label>
+          <input type="number" class="form-control" name="c_reactive_protein" step="0.1" value="5.0"/>
+        </div>
+      </div>
+    </div>
+
+    <!-- Risk Factors -->
+    <div class="section-card">
+      <div class="section-title"><i class="fa fa-clipboard-list me-2"></i>Risk Factor Checklist</div>
+      <div class="row g-3">
+        {% set checks = [
+          ('icu_admission','ICU Admission'),
+          ('previous_hospitalization','Previous Hospitalization'),
+          ('previous_mdr_infection','Previous MDR Infection'),
+          ('antibiotic_use_last_90_days','Antibiotic Use Last 90 Days'),
+          ('recent_surgery','Recent Surgery'),
+          ('chronic_disease','Chronic Disease'),
+          ('diabetes','Diabetes'),
+          ('kidney_disease','Kidney Disease'),
+          ('immunocompromised','Immunocompromised'),
+          ('mechanical_ventilation','Mechanical Ventilation'),
+          ('catheter_use','Catheter Use'),
+          ('fever','Fever'),
+          ('culture_test_positive','Culture Test Positive'),
+          ('prior_antibiotic_failure','Prior Antibiotic Failure'),
+          ('contact_with_mdr_patient','Contact With MDR Patient'),
+        ] %}
+        {% for name, label in checks %}
+        <div class="col-md-4 col-6">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" name="{{ name }}" id="{{ name }}" value="1"/>
+            <label class="form-check-label small" for="{{ name }}">{{ label }}</label>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: Photo + Submit -->
+  <div class="col-lg-4">
+    <div class="section-card">
+      <div class="section-title"><i class="fa fa-camera me-2"></i>Patient Photo (Face Recognition)</div>
+      <div class="text-center mb-3">
+        <div class="photo-placeholder" id="photoPlaceholder" onclick="document.getElementById('photoInput').click()">
+          <i class="fa fa-camera fa-2x mb-2"></i>
+          <span style="font-size:.75rem;">Click to upload photo</span>
+        </div>
+        <img id="photoPreview" class="photo-preview d-none" alt="Preview"/>
+        <input type="file" id="photoInput" name="photo" accept="image/*" class="d-none" onchange="previewPhoto(this)"/>
+        <div class="mt-2 text-muted small">Required for face recognition.<br>JPG/PNG, max 5MB</div>
+        <button type="button" class="btn btn-sm btn-outline-secondary mt-2" onclick="document.getElementById('photoInput').click()">
+          <i class="fa fa-upload me-1"></i>Upload Photo
+        </button>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <div class="section-title"><i class="fa fa-robot me-2"></i>Prediction Preview</div>
+      <div class="text-center text-muted py-2">
+        <i class="fa fa-brain fa-2x mb-2 d-block" style="color:#2563eb;opacity:.4;"></i>
+        <p class="small">Fill the form and submit to generate the XGBoost MDR risk prediction.</p>
+      </div>
+      <div class="d-grid gap-2 mt-3">
+        <button type="submit" class="btn btn-primary fw-semibold" id="submitBtn">
+          <i class="fa fa-user-plus me-2"></i>Register & Predict
+        </button>
+        <a href="{{ url_for('doctor.my_patients') }}" class="btn btn-outline-secondary">Cancel</a>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <div class="section-title"><i class="fa fa-info-circle me-2"></i>What happens next?</div>
+      <ul class="list-unstyled small text-muted">
+        <li class="mb-2"><i class="fa fa-check-circle text-success me-2"></i>Patient is registered in database</li>
+        <li class="mb-2"><i class="fa fa-check-circle text-success me-2"></i>Face embedding generated from photo</li>
+        <li class="mb-2"><i class="fa fa-check-circle text-success me-2"></i>XGBoost model predicts MDR risk</li>
+        <li class="mb-2"><i class="fa fa-check-circle text-success me-2"></i>Alerts sent if high risk</li>
+        <li><i class="fa fa-check-circle text-success me-2"></i>Patient available for live monitoring</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+</form>
+{% endblock %}
+{% block extra_js %}
+<script>
+function previewPhoto(input){
+  if(input.files && input.files[0]){
+    const reader=new FileReader();
+    reader.onload=e=>{
+      document.getElementById('photoPreview').src=e.target.result;
+      document.getElementById('photoPreview').classList.remove('d-none');
+      document.getElementById('photoPlaceholder').classList.add('d-none');
+    };
+    reader.readAsDataURL(input.files[0]);
+  }
+}
+
+document.getElementById('registerForm').addEventListener('submit',function(){
+  const btn=document.getElementById('submitBtn');
+  btn.disabled=true;
+  btn.innerHTML='<span class="spinner-border spinner-border-sm me-2"></span>Processing...';
+});
+
+// Convert checkboxes to 0/1 values on submit
+document.getElementById('registerForm').addEventListener('submit',function(){
+  document.querySelectorAll('.form-check-input[type=checkbox]').forEach(cb=>{
+    if(!cb.checked){
+      const hidden=document.createElement('input');
+      hidden.type='hidden'; hidden.name=cb.name; hidden.value='0';
+      this.appendChild(hidden);
+    }
+  });
+},true);
+
+// Auto-select text on focus for all number inputs to allow easy replacement of default values
+document.querySelectorAll('input[type="number"]').forEach(input => {
+  input.addEventListener('focus', function() {
+    setTimeout(() => {
+      this.select();
+    }, 50);
+  });
+});
+</script>
+{% endblock %}

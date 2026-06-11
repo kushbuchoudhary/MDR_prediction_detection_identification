@@ -1,0 +1,130 @@
+{% extends "shared/base.html" %}
+{% block title %}Patient {{ patient.patient_id }}{% endblock %}
+{% block page_title %}Patient Detail — {{ patient.get('name','') }}{% endblock %}
+{% block content %}
+<div class="row g-3">
+  <!-- Left column -->
+  <div class="col-lg-4">
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-body text-center py-4">
+        {% if patient.get('photo_filename') %}
+          <img src="{{ url_for('static', filename='') }}../uploads/patients/{{ patient.photo_filename }}"
+               class="rounded-circle mb-3" style="width:80px;height:80px;object-fit:cover;border:3px solid #e5e7eb;"
+               onerror="this.src='https://ui-avatars.com/api/?name={{ patient.get('name','P') }}&background=1a3a5c&color=fff&size=80'"/>
+        {% else %}
+          <div class="rounded-circle bg-primary d-flex align-items-center justify-content-center mx-auto mb-3" style="width:80px;height:80px;">
+            <i class="fa fa-user fa-2x text-white"></i>
+          </div>
+        {% endif %}
+        <h5 class="mb-1">{{ patient.get('name','—') }}</h5>
+        <div class="text-muted small">{{ patient.get('patient_id','—') }}</div>
+        <div class="mt-2">
+          {% if patient.get('mdr_status') == 1 %}
+            <span class="badge badge-high fs-6 px-3 py-2">MDR Positive</span>
+          {% else %}
+            <span class="badge badge-low fs-6 px-3 py-2">MDR Negative</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white fw-semibold border-0 pt-3">Patient Info</div>
+      <div class="card-body pt-0">
+        {% set fields = [
+          ('Age', patient.get('age','—')),
+          ('Gender', patient.get('gender','—')),
+          ('Ward', patient.get('ward_type','—')),
+          ('Infection Type', patient.get('infection_type','—')),
+          ('Pathogen', patient.get('pathogen_type','—')),
+          ('Hospital Stay', (patient.get('length_of_hospital_stay','—')|string)+' days'),
+          ('ICU Admitted', 'Yes' if patient.get('icu_admission') else 'No'),
+          ('Assigned Doctor', patient.get('assigned_doctor','—')),
+        ] %}
+        {% for label, val in fields %}
+        <div class="d-flex justify-content-between py-2 border-bottom">
+          <span class="text-muted small">{{ label }}</span>
+          <span class="small fw-semibold">{{ val }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Right column -->
+  <div class="col-lg-8">
+    {% if prediction %}
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header bg-white fw-semibold border-0 pt-3">MDR Prediction Result</div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-4 text-center">
+            <div class="fs-1 fw-bold" style="color:{% if prediction.risk_classification=='High' %}#dc3545{% elif prediction.risk_classification=='Medium' %}#ffc107{% else %}#198754{% endif %};">
+              {{ prediction.get('risk_score_pct','0') }}%
+            </div>
+            <div class="text-muted small">Risk Score</div>
+            <span class="badge badge-{{ prediction.get('risk_classification','Low')|lower }} mt-1">
+              {{ prediction.get('risk_classification','—') }} Risk
+            </span>
+          </div>
+          <div class="col-md-8">
+            <div class="row g-2">
+              {% set pred_fields = [
+                ('Model', prediction.get('model_used','—')),
+                ('Alert', prediction.get('alert_level','—')),
+                ('Isolation', 'Required' if prediction.get('isolation_recommended') else 'Not Required'),
+                ('Culture Test', 'Required' if prediction.get('culture_test_recommended') else 'Not Required'),
+                ('Follow-up', (prediction.get('follow_up_days','7')|string)+' days'),
+              ] %}
+              {% for lbl, val in pred_fields %}
+              <div class="col-6">
+                <div class="bg-light rounded p-2">
+                  <div class="text-muted" style="font-size:.7rem;">{{ lbl }}</div>
+                  <div class="fw-semibold small">{{ val }}</div>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        {% if prediction.get('top_risk_factors') %}
+        <hr/>
+        <div class="fw-semibold small mb-2">Top Risk Factors</div>
+        {% for f in prediction.top_risk_factors %}
+        <div class="d-flex align-items-center gap-2 mb-1">
+          <div class="text-muted small" style="width:160px;">{{ f.feature }}</div>
+          <div class="progress flex-grow-1" style="height:6px;">
+            <div class="progress-bar bg-primary" style="width:{{ (f.importance*100)|round(0) }}%;"></div>
+          </div>
+          <div class="small text-muted" style="width:40px;">{{ '%.3f'|format(f.importance) }}</div>
+        </div>
+        {% endfor %}
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Contact Tracing -->
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header bg-white fw-semibold border-0 pt-3">Contact Tracing History</div>
+      <div class="card-body p-0" style="max-height:200px;overflow-y:auto;">
+        <table class="table table-sm mb-0">
+          <thead style="position:sticky;top:0;background:#f8f9fa;"><tr><th>Contact With</th><th>Duration</th><th>Exposure</th><th>Risk</th><th>Time</th></tr></thead>
+          <tbody>
+            {% for c in contacts %}
+            <tr>
+              <td class="small">{{ c.get('person2_name') or c.get('person1_name','—') }}</td>
+              <td class="small">{{ '%.1f'|format(c.get('duration',0)) }}s</td>
+              <td class="small">{{ '%.1f'|format(c.get('exposure_score',0)) }}</td>
+              <td><span class="badge badge-{{ c.get('exposure_risk','Low')|lower }}">{{ c.get('exposure_risk','Low') }}</span></td>
+              <td class="small text-muted">{{ (c.get('start_time','')|string)[:16] if c.get('start_time') else '' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="text-center text-muted py-3">No contacts recorded</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

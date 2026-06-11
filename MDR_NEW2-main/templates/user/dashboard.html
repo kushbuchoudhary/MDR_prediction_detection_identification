@@ -1,0 +1,110 @@
+{% extends "shared/base.html" %}
+{% block title %}Patient Dashboard{% endblock %}
+{% block page_title %}Patient Portal{% endblock %}
+{% block content %}
+
+{% if patient %}
+<!-- Patient Banner -->
+<div class="card border-0 shadow-sm mb-4" style="background:linear-gradient(135deg,#1a3a5c,#2563eb);color:#fff;border-radius:16px;">
+  <div class="card-body p-4">
+    <div class="d-flex align-items-center gap-4">
+      <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+           style="width:72px;height:72px;background:rgba(255,255,255,.15);font-size:1.8rem;">
+        <i class="fa fa-user"></i>
+      </div>
+      <div class="flex-grow-1">
+        <h4 class="mb-1 fw-bold">{{ patient.get('name','—') }}</h4>
+        <div class="opacity-75 small">Patient ID: {{ patient.get('patient_id','—') }} &nbsp;|&nbsp; Ward: {{ patient.get('ward_type','—') }}</div>
+      </div>
+      <div class="text-end">
+        {% if patient.get('mdr_status') == 1 %}
+          <span class="badge fs-6 px-3 py-2" style="background:#fee2e2;color:#dc3545;">⚠️ MDR Positive</span>
+        {% else %}
+          <span class="badge fs-6 px-3 py-2" style="background:#d1fae5;color:#198754;">✅ MDR Negative</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Quick info -->
+<div class="row g-3 mb-4">
+  {% set quick = [
+    ('Age / Gender', (patient.get('age','—')|string) ~ ' / ' ~ patient.get('gender','—'), 'fa-user-circle', '#dbeafe'),
+    ('Infection Type', patient.get('infection_type','—'), 'fa-virus', '#fee2e2'),
+    ('Ward', patient.get('ward_type','—'), 'fa-hospital', '#d1fae5'),
+    ('Doctor', patient.get('assigned_doctor','—'), 'fa-user-md', '#fef3c7'),
+  ] %}
+  {% for label, val, icon, bg in quick %}
+  <div class="col-6 col-md-3">
+    <div class="card border-0 shadow-sm h-100" style="border-radius:12px;">
+      <div class="card-body p-3 d-flex align-items-center gap-3">
+        <div style="width:40px;height:40px;border-radius:10px;background:{{ bg }};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <i class="fa {{ icon }}" style="color:#2563eb;"></i>
+        </div>
+        <div>
+          <div class="text-muted" style="font-size:.72rem;">{{ label }}</div>
+          <div class="fw-semibold small">{{ val }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Alerts -->
+{% if recent_alerts %}
+<div class="card border-0 shadow-sm mb-4" style="border-left:4px solid #dc3545;">
+  <div class="card-header bg-white border-0 fw-semibold pt-3 text-danger">
+    <i class="fa fa-bell me-2"></i>Recent Alerts
+  </div>
+  <div class="card-body pt-1">
+    {% for a in recent_alerts %}
+    <div class="d-flex align-items-start gap-3 py-2 border-bottom">
+      <span class="badge badge-{{ a.get('alert_level','INFO')|lower }}">{{ a.get('alert_level') }}</span>
+      <div class="flex-grow-1">
+        <div class="small">{{ a.get('message','') }}</div>
+        <div class="text-muted" style="font-size:.72rem;">{{ (a.get('created_at','')|string)[:16] if a.get('created_at') else '' }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div class="row g-3">
+  <div class="col-md-6">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-white border-0 fw-semibold pt-3">Quick Links</div>
+      <div class="card-body d-grid gap-2">
+        <a href="{{ url_for('user.my_records') }}" class="btn btn-outline-primary"><i class="fa fa-file-medical me-2"></i>View Full Records</a>
+        <a href="{{ url_for('user.alerts') }}" class="btn btn-outline-warning"><i class="fa fa-bell me-2"></i>My Alerts</a>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-white border-0 fw-semibold pt-3">Health Tip</div>
+      <div class="card-body">
+        <div class="small text-muted">
+          <i class="fa fa-hand-sparkles text-primary me-2"></i>Wash hands regularly with soap for 20+ seconds.<br/><br/>
+          <i class="fa fa-mask text-primary me-2"></i>Wear a mask in hospital zones when required.<br/><br/>
+          <i class="fa fa-pills text-primary me-2"></i>Complete your antibiotic course as prescribed.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% else %}
+<!-- No patient record linked -->
+<div class="card border-0 shadow-sm text-center py-5">
+  <div class="card-body">
+    <i class="fa fa-file-medical fa-4x mb-3 d-block" style="color:#e5e7eb;"></i>
+    <h5>No Patient Record Linked</h5>
+    <p class="text-muted">Your account is not yet linked to a patient record.<br>Please contact your doctor or the system administrator.</p>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

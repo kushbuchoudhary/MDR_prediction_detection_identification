@@ -1,0 +1,264 @@
+{% extends "shared/base.html" %}
+{% block title %}Patient {{ patient.patient_id }}{% endblock %}
+{% block page_title %}Patient — {{ patient.get('name','') }}{% endblock %}
+{% block content %}
+<div class="row g-3">
+  <!-- Left Panel -->
+  <div class="col-lg-4">
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-body text-center py-4">
+        {% if patient.get('photo_filename') %}
+          <img src="/uploads/patients/{{ patient.photo_filename }}"
+               class="rounded-circle mb-3" style="width:90px;height:90px;object-fit:cover;border:3px solid #e5e7eb;"
+               onerror="this.src='https://ui-avatars.com/api/?name={{ patient.get('name','P')|urlencode }}&background=1a3a5c&color=fff&size=90'"/>
+        {% else %}
+          <div class="rounded-circle bg-primary d-flex align-items-center justify-content-center mx-auto mb-3" style="width:90px;height:90px;">
+            <i class="fa fa-user fa-2x text-white"></i>
+          </div>
+        {% endif %}
+        <h5 class="mb-1 fw-bold">{{ patient.get('name','—') }}</h5>
+        <div class="text-muted small mb-2">{{ patient.get('patient_id','—') }}</div>
+        {% if patient.get('mdr_status') == 1 %}
+          <span class="badge badge-high px-3 py-2 fs-6">⚠️ MDR Positive</span>
+        {% else %}
+          <span class="badge badge-low px-3 py-2 fs-6">✅ MDR Negative</span>
+        {% endif %}
+        {% if patient.get('face_embedding') %}
+          <div class="mt-2"><span class="badge bg-info text-dark small"><i class="fa fa-face-smile me-1"></i>Face Registered</span></div>
+        {% else %}
+          <div class="mt-2"><span class="badge bg-secondary small">No Face Embedding</span></div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header bg-white fw-semibold border-0 pt-3">Clinical Details</div>
+      <div class="card-body pt-2 pb-1">
+        {% set fields = [
+          ('Age / Gender', (patient.get('age','—')|string) ~ ' / ' ~ patient.get('gender','—')),
+          ('Ward Type', patient.get('ward_type','—')),
+          ('Infection Type', patient.get('infection_type','—')),
+          ('Pathogen', patient.get('pathogen_type','—')),
+          ('Hospital Stay', (patient.get('length_of_hospital_stay','—')|string) ~ ' days'),
+          ('ICU Admitted', 'Yes' if patient.get('icu_admission') else 'No'),
+          ('Assigned Doctor', patient.get('assigned_doctor','—')),
+          ('Registered', (patient.get('registration_date','')|string)[:10] if patient.get('registration_date') else '—'),
+        ] %}
+        {% for label, val in fields %}
+        <div class="d-flex justify-content-between py-2 border-bottom">
+          <span class="text-muted" style="font-size:.8rem;">{{ label }}</span>
+          <span class="fw-semibold" style="font-size:.8rem;">{{ val }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white fw-semibold border-0 pt-3">Actions</div>
+      <div class="card-body d-grid gap-2">
+        <button class="btn btn-danger" onclick="generateReport('{{ patient.get('patient_id','') }}')">
+          <i class="fa fa-file-pdf me-2"></i>Generate PDF Report
+        </button>
+        <a href="{{ url_for('doctor.monitoring') }}" class="btn btn-outline-primary">
+          <i class="fa fa-video me-2"></i>Live Monitoring
+        </a>
+        <a href="{{ url_for('doctor.my_patients') }}" class="btn btn-outline-secondary">
+          <i class="fa fa-arrow-left me-2"></i>Back to Patients
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Panel -->
+  <div class="col-lg-8">
+    <!-- Prediction Result -->
+    {% if prediction %}
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header bg-white fw-semibold border-0 pt-3 d-flex justify-content-between">
+        <span><i class="fa fa-brain me-2 text-primary"></i>MDR Risk Prediction (XGBoost)</span>
+        <span class="badge badge-{{ prediction.get('alert_level','INFO')|lower }}">{{ prediction.get('alert_level','INFO') }}</span>
+      </div>
+      <div class="card-body">
+        <div class="row g-3 mb-3">
+          <div class="col-md-4 text-center">
+            <div style="position:relative;display:inline-block;">
+              <svg viewBox="0 0 100 100" width="120" height="120">
+                <circle cx="50" cy="50" r="45" fill="none" stroke="#e5e7eb" stroke-width="10"/>
+                <circle cx="50" cy="50" r="45" fill="none"
+                  stroke="{% if prediction.risk_classification=='High' %}#dc3545{% elif prediction.risk_classification=='Medium' %}#ffc107{% else %}#198754{% endif %}"
+                  stroke-width="10" stroke-dasharray="{{ prediction.get('risk_score_pct',0)|round(0)|int * 2.827 }} 282.7"
+                  stroke-linecap="round" transform="rotate(-90 50 50)"/>
+                <text x="50" y="48" text-anchor="middle" font-size="18" font-weight="bold"
+                  fill="{% if prediction.risk_classification=='High' %}#dc3545{% elif prediction.risk_classification=='Medium' %}#ffc107{% else %}#198754{% endif %}">
+                  {{ prediction.get('risk_score_pct',0)|round(1) }}%
+                </text>
+                <text x="50" y="63" text-anchor="middle" font-size="9" fill="#6b7280">Risk Score</text>
+              </svg>
+            </div>
+            <div class="mt-2">
+              <span class="badge badge-{{ prediction.get('risk_classification','Low')|lower }} fs-6 px-3 py-2">
+                {{ prediction.get('risk_classification','—') }} Risk
+              </span>
+            </div>
+          </div>
+          <div class="col-md-8">
+            <div class="row g-2">
+              {% set pf = [
+                ('MDR Probability', '%.1f%%'|format(prediction.get('mdr_probability',0)*100)),
+                ('Model Used', prediction.get('model_used','XGBoost')),
+                ('Isolation', '⚠️ Required' if prediction.get('isolation_recommended') else '✅ Not Required'),
+                ('Culture Test', '⚠️ Required' if prediction.get('culture_test_recommended') else '✅ Not Required'),
+                ('Follow-up', (prediction.get('follow_up_days',7)|string) ~ ' days'),
+              ] %}
+              {% for lbl, val in pf %}
+              <div class="col-6">
+                <div class="rounded p-2 border" style="background:#f8faff;">
+                  <div class="text-muted" style="font-size:.7rem;">{{ lbl }}</div>
+                  <div class="fw-semibold small">{{ val }}</div>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+
+        <!-- Top Risk Factors -->
+        {% if prediction.get('top_risk_factors') %}
+        <hr class="my-2"/>
+        <div class="fw-semibold small mb-2 text-muted">Top Contributing Risk Factors</div>
+        {% for f in prediction.top_risk_factors %}
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <div class="text-muted small" style="width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ f.feature }}</div>
+          <div class="progress flex-grow-1" style="height:8px;">
+            <div class="progress-bar bg-primary" style="width:{{ [f.importance*100*10,100]|min }}%;border-radius:4px;"></div>
+          </div>
+          <div class="small text-muted" style="width:48px;">{{ '%.4f'|format(f.importance) }}</div>
+        </div>
+        {% endfor %}
+        {% endif %}
+
+        <!-- Clinical Suggestions -->
+        {% if prediction.get('clinical_suggestions') %}
+        <hr class="my-2"/>
+        <div class="fw-semibold small mb-2 text-muted">Clinical Recommendations</div>
+        {% for s in prediction.clinical_suggestions %}
+        <div class="small mb-1 p-2 rounded" style="background:#f0f9ff;border-left:3px solid #2563eb;">{{ s }}</div>
+        {% endfor %}
+        {% endif %}
+      </div>
+    </div>
+    {% else %}
+    <div class="alert alert-warning">No prediction found for this patient. Try re-registering.</div>
+    {% endif %}
+
+    <!-- Contact Tracing -->
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header bg-white fw-semibold border-0 pt-3">
+        <i class="fa fa-link me-2 text-warning"></i>Contact Tracing History
+      </div>
+      <div class="card-body p-0" style="max-height:220px;overflow-y:auto;">
+        {% if contacts %}
+        <table class="table table-sm table-hover mb-0">
+          <thead style="position:sticky;top:0;background:#f8f9fa;font-size:.78rem;">
+            <tr><th>Contact With</th><th>Duration</th><th>Exposure Score</th><th>Risk</th><th>Time</th></tr>
+          </thead>
+          <tbody>
+            {% for c in contacts %}
+            <tr>
+              <td class="small fw-semibold">
+                {% if c.get('person1_id') == patient.patient_id %}{{ c.get('person2_name','—') }}
+                {% else %}{{ c.get('person1_name','—') }}{% endif %}
+              </td>
+              <td class="small">{{ '%.1f'|format(c.get('duration',0)) }}s</td>
+              <td class="small">
+                <div class="d-flex align-items-center gap-1">
+                  <div class="progress" style="height:5px;width:50px;">
+                    <div class="progress-bar {% if c.get('exposure_score',0)>=60 %}bg-danger{% elif c.get('exposure_score',0)>=30 %}bg-warning{% else %}bg-success{% endif %}"
+                         style="width:{{ [c.get('exposure_score',0)|int,100]|min }}%;"></div>
+                  </div>
+                  {{ '%.1f'|format(c.get('exposure_score',0)) }}
+                </div>
+              </td>
+              <td><span class="badge badge-{{ c.get('exposure_risk','Low')|lower }}">{{ c.get('exposure_risk','Low') }}</span></td>
+              <td class="small text-muted">{{ (c.get('start_time','')|string)[:16] if c.get('start_time') else '' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="text-center text-muted py-4"><i class="fa fa-link fa-2x mb-2 d-block opacity-25"></i>No contact events recorded</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Reports -->
+    {% if reports %}
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white fw-semibold border-0 pt-3"><i class="fa fa-file-pdf me-2 text-danger"></i>Generated Reports</div>
+      <div class="card-body p-0">
+        {% for r in reports %}
+        <div class="d-flex align-items-center justify-content-between p-3 border-bottom">
+          <div>
+            {% set is_exposure = r.get('report_type') == 'Exposure Report' or r.get('contact_person_id') or r.get('generated_by') == 'system' or 'contact' in r.get('filename','').lower() %}
+            <div class="small fw-semibold d-flex align-items-center gap-2">
+              <i class="fa {% if is_exposure %}fa-people-arrows text-warning{% else %}fa-file-medical text-primary{% endif %}" style="font-size: 0.9rem;"></i>
+              <span>{% if is_exposure %}Exposure Trace Alert{% else %}Diagnostic Assessment Report{% endif %}</span>
+              <span class="badge {% if is_exposure %}bg-warning text-dark{% else %}bg-primary{% endif %} px-2" style="font-size: 0.65rem;">
+                {{ r.get('report_id','') }}
+              </span>
+            </div>
+            <div class="text-muted mt-1" style="font-size:.72rem;">
+              {% if is_exposure %}
+                {% set target_name = r.get('contact_person_name') or 'Unregistered Entity' %}
+                {% set target_id = r.get('contact_person_id') or 'UNKNOWN' %}
+                <span class="text-secondary"><i class="fa fa-user-secret me-1"></i>Contact Target: <strong>{{ target_name }}</strong> (${{ target_id }})</span>
+                <br>
+              {% endif %}
+              <span>{{ (r.get('created_at','')|string)[:16] if r.get('created_at') else '' }} — by {{ r.get('generated_by','—') }}</span>
+            </div>
+          </div>
+          <a href="{{ url_for('doctor.download_report', report_id=r.get('report_id','')) }}"
+             class="btn btn-sm btn-outline-danger"><i class="fa fa-download me-1"></i>Download</a>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Report generation toast -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index:9999;">
+  <div id="reportToast" class="toast" role="alert">
+    <div class="toast-header">
+      <i class="fa fa-file-pdf me-2 text-danger"></i>
+      <strong class="me-auto">Report</strong>
+      <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+    </div>
+    <div class="toast-body" id="reportToastBody">Generating...</div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+async function generateReport(patientId){
+  const toast = new bootstrap.Toast(document.getElementById('reportToast'));
+  document.getElementById('reportToastBody').textContent = '⏳ Generating PDF report...';
+  toast.show();
+  try{
+    const r = await fetch(`/doctor/api/generate-report/${patientId}`, {method:'POST'});
+    const d = await r.json();
+    if(d.success){
+      document.getElementById('reportToastBody').innerHTML =
+        `✅ Report generated! <a href="/doctor/reports/download/${d.report_id}" class="btn btn-sm btn-danger ms-2"><i class="fa fa-download me-1"></i>Download</a>`;
+      setTimeout(()=>location.reload(), 3000);
+    } else {
+      document.getElementById('reportToastBody').textContent = '❌ Error: ' + (d.error||'Unknown error');
+    }
+  }catch(e){
+    document.getElementById('reportToastBody').textContent = '❌ Request failed: ' + e.message;
+  }
+}
+</script>
+{% endblock %}

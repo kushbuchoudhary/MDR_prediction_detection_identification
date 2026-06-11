@@ -1,0 +1,821 @@
+{% extends "shared/base.html" %}
+{% block title %}Contact Tracing Command Center{% endblock %}
+{% block page_title %}Epidemiological Tracing Command Center{% endblock %}
+{% block extra_head %}
+<!-- Vis.js network graph library -->
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<style>
+  :root {
+    --dark-bg: #0f172a;
+    --dark-panel: #1e293b;
+    --neon-blue: #06b6d4;
+    --neon-red: #ef4444;
+    --neon-orange: #f59e0b;
+    --neon-green: #10b981;
+    --neon-purple: #a855f7;
+    --border-glass: rgba(255, 255, 255, 0.08);
+  }
+
+  .nav-pills .nav-link.active {
+    background: linear-gradient(135deg, var(--accent), #1d4ed8) !important;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+  }
+  .nav-pills .nav-link {
+    color: var(--primary);
+    font-weight: 600;
+    border: 1px solid rgba(0,0,0,0.05);
+    background: #fff;
+    margin-right: 8px;
+    transition: all 0.2s;
+  }
+  .nav-pills .nav-link:hover {
+    background: #f1f5f9;
+  }
+
+  /* Command Center Panel */
+  .command-center {
+    background-color: var(--dark-bg);
+    border-radius: 16px;
+    padding: 24px;
+    color: #f1f5f9;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+    border: 1px solid var(--border-glass);
+    margin-bottom: 24px;
+  }
+
+  /* Tech Stats Layout */
+  .stat-card-tech {
+    background: rgba(30, 41, 59, 0.45);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--border-glass);
+    border-radius: 12px;
+    padding: 16px;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  .stat-card-tech:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px rgba(6, 182, 212, 0.15);
+    border-color: rgba(6, 182, 212, 0.3);
+  }
+  .stat-card-tech::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+  }
+  .stat-card-tech.blue::before { background-color: var(--neon-blue); }
+  .stat-card-tech.red::before { background-color: var(--neon-red); }
+  .stat-card-tech.orange::before { background-color: var(--neon-orange); }
+  .stat-card-tech.green::before { background-color: var(--neon-green); }
+
+  .stat-value-tech {
+    font-family: 'Courier New', Courier, monospace;
+    font-weight: 700;
+    font-size: 1.8rem;
+    letter-spacing: -0.5px;
+    color: #ffffff;
+  }
+  .stat-label-tech {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* Control Panel */
+  .controls-bar {
+    background: rgba(30, 41, 59, 0.7);
+    border-radius: 8px;
+    padding: 10px 16px;
+    border: 1px solid var(--border-glass);
+    margin-bottom: 16px;
+  }
+
+  /* Vis Network Canvas */
+  #networkGraph {
+    border-radius: 12px;
+    background-color: #090d16;
+    background-image: 
+      radial-gradient(rgba(99, 102, 241, 0.1) 1px, transparent 0),
+      linear-gradient(rgba(255, 255, 255, 0.005) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.005) 1px, transparent 1px);
+    background-size: 20px 20px, 40px 40px, 40px 40px;
+    border: 1px solid var(--border-glass);
+    box-shadow: inset 0 0 40px rgba(0,0,0,0.6);
+  }
+
+  /* Details Panel - Glassmorphic */
+  .glass-panel {
+    background: rgba(30, 41, 59, 0.6);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border-glass);
+    border-radius: 12px;
+    color: #e2e8f0;
+    height: 100%;
+    min-height: 520px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+  }
+  .glass-panel-header {
+    border-bottom: 1px solid var(--border-glass);
+    padding: 16px 20px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .glass-panel-body {
+    padding: 20px;
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  /* Custom Glow Animations */
+  .glow-pulse {
+    animation: glowAnimation 2s infinite alternate;
+  }
+  @keyframes glowAnimation {
+    0% { box-shadow: 0 0 4px rgba(6, 182, 212, 0.2); }
+    100% { box-shadow: 0 0 12px rgba(6, 182, 212, 0.5); }
+  }
+
+  .tech-badge {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: inline-block;
+  }
+  .tech-badge-high { background: rgba(239, 68, 68, 0.18); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.35); }
+  .tech-badge-medium { background: rgba(245, 158, 11, 0.18); color: #fde047; border: 1px solid rgba(245, 158, 11, 0.35); }
+  .tech-badge-low { background: rgba(16, 185, 129, 0.18); color: #86efac; border: 1px solid rgba(16, 185, 129, 0.35); }
+
+  /* Input fields */
+  .tech-input, .tech-select {
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid var(--border-glass);
+    color: #ffffff;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+  }
+  .tech-input:focus, .tech-select:focus {
+    border-color: var(--neon-blue);
+    outline: none;
+    box-shadow: 0 0 8px rgba(6, 182, 212, 0.3);
+    background: rgba(15, 23, 42, 0.9);
+  }
+  .tech-select option {
+    background: #1e293b;
+    color: #fff;
+  }
+
+  .btn-tech-outline {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.15);
+    color: #cbd5e1;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 0.82rem;
+    font-weight: 500;
+    transition: all 0.2s;
+  }
+  .btn-tech-outline:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    border-color: rgba(255,255,255,0.3);
+  }
+
+  .btn-tech-glow {
+    background: var(--neon-blue);
+    color: #0b0f19 !important;
+    border: none;
+    font-weight: 600;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 0.82rem;
+    box-shadow: 0 0 10px rgba(6, 182, 212, 0.3);
+    transition: all 0.2s;
+  }
+  .btn-tech-glow:hover {
+    box-shadow: 0 0 18px rgba(6, 182, 212, 0.6);
+    transform: scale(1.02);
+  }
+
+  /* List group visual styling for dark mode */
+  .tech-list-group {
+    background: transparent;
+  }
+  .tech-list-item {
+    background: rgba(30, 41, 59, 0.25);
+    border: 1px solid var(--border-glass);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    padding: 12px;
+    transition: background-color 0.2s;
+  }
+  .tech-list-item:hover {
+    background: rgba(30, 41, 59, 0.45);
+  }
+
+  /* Custom tooltips */
+  div.vis-tooltip {
+    background-color: #0f172a !important;
+    border: 1px solid rgba(255,255,255,0.1) !important;
+    color: #f1f5f9 !important;
+    font-family: 'Inter', sans-serif !important;
+    font-size: 11px !important;
+    padding: 8px 12px !important;
+    border-radius: 6px !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Tabs navigation -->
+<ul class="nav nav-pills mb-3" id="contactTabs" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" id="graph-tab" data-bs-toggle="pill" data-bs-target="#graph-view" type="button" role="tab" aria-controls="graph-view" aria-selected="true">
+      <i class="fa fa-circle-nodes me-2"></i>Interactive Network Map
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="table-tab" data-bs-toggle="pill" data-bs-target="#table-view" type="button" role="tab" aria-controls="table-view" aria-selected="false">
+      <i class="fa fa-list me-2"></i>All Contact Logs
+    </button>
+  </li>
+</ul>
+
+<div class="tab-content" id="contactTabsContent">
+  <!-- Interactive Command Center View -->
+  <div class="tab-pane fade show active" id="graph-view" role="tabpanel" aria-labelledby="graph-tab">
+    <div class="command-center">
+      
+      <!-- Top Metrics Row -->
+      <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+          <div class="stat-card-tech blue">
+            <div class="stat-value-tech" id="statNodes">—</div>
+            <div class="stat-label-tech">Monitored Entities</div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="stat-card-tech red">
+            <div class="stat-value-tech" id="statHighRisk">—</div>
+            <div class="stat-label-tech">High Risk Alerts</div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="stat-card-tech orange">
+            <div class="stat-value-tech" id="statAvgDur">—</div>
+            <div class="stat-label-tech">Avg Contact Duration</div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="stat-card-tech green">
+            <div class="stat-value-tech" id="statMaxScore">—</div>
+            <div class="stat-label-tech">Peak Exposure Score</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Controls & Filters Bar -->
+      <div class="controls-bar d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <input type="text" id="nodeSearch" class="tech-input" placeholder="Search by name..." style="width: 180px;" oninput="filterGraph()">
+          <select id="riskFilter" class="tech-select" onchange="filterGraph()">
+            <option value="All">All Exposure Levels</option>
+            <option value="High">High Risk Only</option>
+            <option value="Medium">Medium Risk Only</option>
+            <option value="Low">Low Risk Only</option>
+          </select>
+          <button class="btn-tech-outline" onclick="filterGraph(true)">Reset Filters</button>
+        </div>
+        
+        <div class="d-flex align-items-center gap-2">
+          <button class="btn-tech-outline btn-sm" onclick="togglePhysics()" id="physicsBtn" title="Freeze/Unfreeze nodes physics layout">
+            <i class="fa fa-pause me-1"></i>Freeze Layout
+          </button>
+          <button class="btn-tech-outline btn-sm" onclick="fitView()" title="Fit all nodes to view">
+            <i class="fa fa-expand me-1"></i>Fit View
+          </button>
+          <button class="btn-tech-outline btn-sm" onclick="zoomIn()" title="Zoom In">
+            <i class="fa fa-search-plus"></i>
+          </button>
+          <button class="btn-tech-outline btn-sm" onclick="zoomOut()" title="Zoom Out">
+            <i class="fa fa-search-minus"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Map & Inspector Panel Row -->
+      <div class="row g-3">
+        <!-- Main Network Graph -->
+        <div class="col-lg-8">
+          <div class="position-relative">
+            <div id="networkGraph" style="height: 520px;"></div>
+            <!-- Alert badge in canvas overlay -->
+            <div class="position-absolute top-0 end-0 m-3 px-3 py-2 rounded shadow-sm d-flex align-items-center gap-2" 
+                 style="background: rgba(15, 23, 42, 0.85); border: 1px solid var(--border-glass);">
+              <span class="d-inline-block rounded-circle bg-danger glow-pulse" style="width:8px; height:8px;"></span>
+              <span class="small text-muted font-monospace" style="font-size: 0.7rem;">LIVE TRACKING NODE NETWORK</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Glassmorphic Details Card -->
+        <div class="col-lg-4">
+          <div class="glass-panel" id="detailsCard">
+            <div class="glass-panel-header">
+              <i class="fa fa-info-circle text-info"></i>
+              <span>Inspection Radar</span>
+            </div>
+            <div class="glass-panel-body" id="detailsBody">
+              <div class="text-center text-muted py-5 mt-5">
+                <i class="fa fa-bullseye fa-3x mb-3 d-block opacity-25 text-info"></i>
+                <h6 class="fw-bold text-light mb-2">radar offline</h6>
+                <p class="small text-muted px-3">Select any person (node) or connection line (edge) on the map interface to view detailed risk analysis and logs.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Traditional Table View -->
+  <div class="tab-pane fade" id="table-view" role="tabpanel" aria-labelledby="table-tab">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white border-0 fw-semibold pt-3">All Contact Events</div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-custom table-hover mb-0">
+            <thead>
+              <tr><th>Person 1</th><th>Person 2</th><th>Duration (s)</th><th>Exposure Score</th><th>Exposure Risk</th><th>Avg Proximity</th><th>Start Time</th></tr>
+            </thead>
+            <tbody>
+              {% for c in contacts %}
+              <tr>
+                <td class="fw-semibold small">{{ c.get('person1_name','—') }}<br><span class="text-muted">{{ c.get('person1_id','') }}</span></td>
+                <td class="fw-semibold small">{{ c.get('person2_name','—') }}<br><span class="text-muted">{{ c.get('person2_id','') }}</span></td>
+                <td>{{ '%.1f'|format(c.get('duration',0)) }}</td>
+                <td>
+                  <div class="d-flex align-items-center gap-2">
+                    <div class="progress flex-grow-1" style="height:6px;width:80px;">
+                      <div class="progress-bar {% if c.get('exposure_score',0)>=60 %}bg-danger{% elif c.get('exposure_score',0)>=30 %}bg-warning{% else %}bg-success{% endif %}"
+                           style="width:{{ [c.get('exposure_score',0), 100]|min }}%;"></div>
+                    </div>
+                    <span class="small">{{ '%.1f'|format(c.get('exposure_score',0)) }}</span>
+                  </div>
+                </td>
+                <td><span class="badge badge-{{ c.get('exposure_risk','Low')|lower }}">{{ c.get('exposure_risk','Low') }}</span></td>
+                <td class="small">{{ '%.3f'|format(c.get('avg_proximity',0)) }}</td>
+                <td class="small text-muted">{{ (c.get('start_time','')|string)[:16] if c.get('start_time') else '' }}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="7" class="text-center text-muted py-5"><i class="fa fa-link fa-2x mb-2 d-block opacity-25"></i>No contact events recorded</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Raw Database Traces serialized from Jinja
+const contactsData = [
+  {% for c in contacts %}
+  {
+    person1_id: "{{ c.get('person1_id','') }}",
+    person1_name: "{{ c.get('person1_name','Unknown') }}",
+    person2_id: "{{ c.get('person2_id','') }}",
+    person2_name: "{{ c.get('person2_name','Unknown') }}",
+    duration: {{ c.get('duration',0) }},
+    exposure_score: {{ c.get('exposure_score',0) }},
+    exposure_risk: "{{ c.get('exposure_risk','Low') }}",
+    avg_proximity: {{ c.get('avg_proximity',0) }},
+    start_time: "{{ c.get('start_time','') }}"
+  }{% if not loop.last %},{% endif %}
+  {% endfor %}
+];
+
+let network = null;
+let allNodesSet = new Map();
+let allEdgesList = [];
+let physicsEnabled = true;
+
+// Initialize command center
+document.addEventListener("DOMContentLoaded", () => {
+  renderVisualNetwork();
+  updateRealTimeStats(contactsData);
+});
+
+// Update top statistics panel dynamically
+function updateRealTimeStats(filteredContacts) {
+  const uniqueEntities = new Set();
+  let highRiskCount = 0;
+  let durationSum = 0;
+  let maxScore = 0;
+
+  filteredContacts.forEach(c => {
+    uniqueEntities.add(c.person1_id);
+    uniqueEntities.add(c.person2_id);
+    if (c.exposure_risk === 'High') highRiskCount++;
+    durationSum += c.duration;
+    if (c.exposure_score > maxScore) maxScore = c.exposure_score;
+  });
+
+  const avgDuration = filteredContacts.length > 0 ? (durationSum / filteredContacts.length).toFixed(1) : "0.0";
+
+  document.getElementById("statNodes").innerText = uniqueEntities.size;
+  document.getElementById("statHighRisk").innerText = highRiskCount;
+  document.getElementById("statAvgDur").innerText = avgDuration + "s";
+  document.getElementById("statMaxScore").innerText = maxScore.toFixed(1) + "%";
+}
+
+// Build Vis.js datasets and render the network graph
+function renderVisualNetwork(filterFunc = null) {
+  allNodesSet.clear();
+  allEdgesList = [];
+
+  // Filter contacts data if filter function is provided
+  const activeContacts = filterFunc ? contactsData.filter(filterFunc) : contactsData;
+
+  activeContacts.forEach((c, index) => {
+    // Node Person 1
+    if (!allNodesSet.has(c.person1_id)) {
+      const isUnknown = c.person1_id.startsWith('UNKNOWN');
+      allNodesSet.set(c.person1_id, {
+        id: c.person1_id,
+        label: c.person1_name,
+        shape: 'dot',
+        size: isUnknown ? 16 : 24,
+        color: {
+          background: isUnknown ? '#1e293b' : '#0ea5e9',
+          border: isUnknown ? '#64748b' : '#38bdf8',
+          highlight: { background: '#ef4444', border: '#f87171' }
+        },
+        borderWidth: 2,
+        borderWidthSelected: 4,
+        shadow: { enabled: true, color: 'rgba(0,0,0,0.4)', size: 8, x: 0, y: 3 },
+        font: { color: '#ffffff', size: 12, face: 'Inter', background: '#090d16', strokeWidth: 0 }
+      });
+    }
+
+    // Node Person 2
+    if (!allNodesSet.has(c.person2_id)) {
+      const isUnknown = c.person2_id.startsWith('UNKNOWN');
+      allNodesSet.set(c.person2_id, {
+        id: c.person2_id,
+        label: c.person2_name,
+        shape: 'dot',
+        size: isUnknown ? 16 : 24,
+        color: {
+          background: isUnknown ? '#1e293b' : '#0ea5e9',
+          border: isUnknown ? '#64748b' : '#38bdf8',
+          highlight: { background: '#ef4444', border: '#f87171' }
+        },
+        borderWidth: 2,
+        borderWidthSelected: 4,
+        shadow: { enabled: true, color: 'rgba(0,0,0,0.4)', size: 8, x: 0, y: 3 },
+        font: { color: '#ffffff', size: 12, face: 'Inter', background: '#090d16', strokeWidth: 0 }
+      });
+    }
+
+    // Edge
+    const edgeColor = c.exposure_risk === 'High' ? '#ef4444' : c.exposure_risk === 'Medium' ? '#f59e0b' : '#10b981';
+    allEdgesList.push({
+      from: c.person1_id,
+      to: c.person2_id,
+      width: Math.min(Math.max(c.duration / 3, 2), 10), // thickness matches contact duration
+      color: { color: edgeColor, highlight: edgeColor, hover: edgeColor },
+      title: `Duration: ${c.duration.toFixed(1)}s<br>Risk: ${c.exposure_risk}<br>Exposure Score: ${c.exposure_score.toFixed(1)}%`,
+      id: `edge_${index}`
+    });
+  });
+
+  const container = document.getElementById('networkGraph');
+  const nodesArray = Array.from(allNodesSet.values());
+
+  if (nodesArray.length > 0) {
+    const data = {
+      nodes: new vis.DataSet(nodesArray),
+      edges: new vis.DataSet(allEdgesList)
+    };
+
+    const options = {
+      nodes: {
+        shadow: true
+      },
+      edges: {
+        shadow: true,
+        smooth: {
+          type: 'continuous',
+          forceDirection: 'none',
+          roundness: 0.5
+        }
+      },
+      interaction: {
+        hover: true,
+        tooltipDelay: 150
+      },
+      physics: {
+        enabled: physicsEnabled,
+        barnesHut: {
+          gravitationalConstant: -2000,
+          centralGravity: 0.2,
+          springLength: 100,
+          springConstant: 0.04,
+          damping: 0.09
+        }
+      }
+    };
+
+    network = new vis.Network(container, data, options);
+
+    // Bind Interaction Triggers
+    network.on("selectNode", (params) => {
+      const nodeId = params.nodes[0];
+      const node = allNodesSet.get(nodeId);
+      displayNodeDetails(node);
+    });
+
+    network.on("selectEdge", (params) => {
+      const edgeId = params.edges[0];
+      if (edgeId && edgeId.startsWith('edge_')) {
+        const index = parseInt(edgeId.replace('edge_', ''));
+        const contact = contactsData[index];
+        displayEdgeDetails(contact);
+      }
+    });
+
+    network.on("deselectNode", () => resetDetailsPanel());
+    network.on("deselectEdge", () => resetDetailsPanel());
+
+  } else {
+    container.innerHTML = `
+      <div class="text-center text-muted py-5 mt-5">
+        <i class="fa fa-unlink fa-3x mb-3 opacity-25" style="color:var(--neon-purple);"></i>
+        <p>No active exposures meet current radar criteria.</p>
+      </div>`;
+  }
+}
+
+// Search & Filter Operations
+function filterGraph(reset = false) {
+  if (reset) {
+    document.getElementById("nodeSearch").value = "";
+    document.getElementById("riskFilter").value = "All";
+    renderVisualNetwork();
+    updateRealTimeStats(contactsData);
+    resetDetailsPanel();
+    return;
+  }
+
+  const query = document.getElementById("nodeSearch").value.toLowerCase().trim();
+  const risk = document.getElementById("riskFilter").value;
+
+  const filterFunc = (c) => {
+    const matchesRisk = (risk === "All") || (c.exposure_risk === risk);
+    const matchesSearch = !query || 
+      c.person1_name.toLowerCase().includes(query) || 
+      c.person1_id.toLowerCase().includes(query) || 
+      c.person2_name.toLowerCase().includes(query) || 
+      c.person2_id.toLowerCase().includes(query);
+    return matchesRisk && matchesSearch;
+  };
+
+  renderVisualNetwork(filterFunc);
+
+  const filteredData = contactsData.filter(filterFunc);
+  updateRealTimeStats(filteredData);
+  resetDetailsPanel();
+}
+
+// Display Inspector details for specific node (patient/entity)
+function displayNodeDetails(node) {
+  const body = document.getElementById('detailsBody');
+  const isUnknown = node.id.startsWith('UNKNOWN');
+  
+  // Calculate specific metrics
+  const contacts = contactsData.filter(c => c.person1_id === node.id || c.person2_id === node.id);
+  const highContacts = contacts.filter(c => c.exposure_risk === 'High');
+  const medContacts = contacts.filter(c => c.exposure_risk === 'Medium');
+  
+  // Extract recent links listing
+  let linksListHTML = '';
+  contacts.slice(0, 5).forEach(c => {
+    const targetName = (c.person1_id === node.id) ? c.person2_name : c.person1_name;
+    const riskCls = c.exposure_risk === 'High' ? 'high' : c.exposure_risk === 'Medium' ? 'medium' : '';
+    linksListHTML += `
+      <div class="timeline-link ${riskCls}">
+        <div class="d-flex justify-content-between">
+          <span class="small fw-semibold text-white">${targetName}</span>
+          <span class="text-muted" style="font-size:0.7rem;">${c.duration.toFixed(0)}s</span>
+        </div>
+        <div class="small text-muted font-monospace" style="font-size:0.7rem;">Exposure: ${c.exposure_score.toFixed(1)}%</div>
+      </div>
+    `;
+  });
+
+  body.innerHTML = `
+    <div class="text-center mb-4">
+      <div class="rounded-circle d-inline-flex align-items-center justify-content-center mb-2 pulse-glow" 
+           style="width:64px; height:64px; background:${isUnknown ? 'rgba(30,41,59,0.5)' : 'rgba(6,182,212,0.15)'}; border:2px solid ${isUnknown ? '#475569' : 'var(--neon-blue)'};">
+        <i class="fa ${isUnknown ? 'fa-user-secret' : 'fa-hospital-user'} fa-lg" style="color:${isUnknown ? '#cbd5e1' : 'var(--neon-blue)'};"></i>
+      </div>
+      <h5 class="fw-bold mb-1 text-white">${node.label}</h5>
+      <span class="tech-badge ${isUnknown ? 'tech-badge-medium' : 'tech-badge-low'}">
+        ${isUnknown ? 'Unregistered Entity' : 'Registered Patient'}
+      </span>
+    </div>
+
+    <div class="mb-3">
+      <label class="small text-muted uppercase font-monospace" style="font-size:0.68rem;letter-spacing:0.05em;">Trace ID</label>
+      <div class="bg-dark p-2 rounded small text-break font-monospace" style="border:1px solid var(--border-glass); background-color:#090d16 !important;">${node.id}</div>
+    </div>
+
+    <div class="mb-3">
+      <label class="small text-muted uppercase font-monospace" style="font-size:0.68rem;letter-spacing:0.05em;">Exposure Metrics</label>
+      <div class="row g-2 text-center mt-1">
+        <div class="col-4">
+          <div class="p-2 rounded bg-black-50" style="background:rgba(0,0,0,0.2); border:1px solid var(--border-glass);">
+            <div class="fw-bold text-white small">${contacts.length}</div>
+            <div class="text-muted" style="font-size:0.65rem;">Links</div>
+          </div>
+        </div>
+        <div class="col-4">
+          <div class="p-2 rounded" style="background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.2);">
+            <div class="fw-bold text-danger small">${highContacts.length}</div>
+            <div class="text-muted" style="font-size:0.65rem;">Critical</div>
+          </div>
+        </div>
+        <div class="col-4">
+          <div class="p-2 rounded" style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2);">
+            <div class="fw-bold text-warning small">${medContacts.length}</div>
+            <div class="text-muted" style="font-size:0.65rem;">Warning</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    ${linksListHTML ? `
+    <div class="mb-4">
+      <label class="small text-muted uppercase font-monospace" style="font-size:0.68rem;letter-spacing:0.05em;">Recent Contact Chains</label>
+      <div class="mt-2" style="max-height:150px; overflow-y:auto;">
+        ${linksListHTML}
+      </div>
+    </div>
+    ` : ''}
+
+    <div class="mt-auto pt-3 border-top" style="border-color: var(--border-glass) !important;">
+      <button class="btn btn-tech-glow w-100 mb-2" onclick="sendManualPriorityAlert('${node.id}', 'patient')">
+        <i class="fa fa-envelope me-1"></i>Dispatch Patient Alert
+      </button>
+    </div>
+  `;
+}
+
+// Display Inspector details for specific link (edge)
+function displayEdgeDetails(contact) {
+  const body = document.getElementById('detailsBody');
+  const risk = contact.exposure_risk || 'Low';
+  const badgeCls = risk === 'High' ? 'tech-badge-high' : risk === 'Medium' ? 'tech-badge-medium' : 'tech-badge-low';
+  
+  body.innerHTML = `
+    <div class="text-center mb-4">
+      <div class="d-inline-flex align-items-center justify-content-center mb-2 rounded-circle" 
+           style="width:50px; height:50px; background:rgba(245,158,11,0.1); border:1px solid var(--neon-orange);">
+        <i class="fa fa-link text-warning fa-lg"></i>
+      </div>
+      <h5 class="fw-bold mb-1 text-white">Exposure Link Details</h5>
+      <span class="tech-badge ${badgeCls}">${risk} Risk Connection</span>
+    </div>
+
+    <div class="tech-list-group small mb-4">
+      <div class="tech-list-item">
+        <div class="text-muted" style="font-size:0.7rem;">Subject Alpha (Source)</div>
+        <div class="fw-bold text-white mb-1">${contact.person1_name}</div>
+        <div class="text-muted font-monospace text-truncate" style="font-size: 0.68rem;">ID: ${contact.person1_id}</div>
+      </div>
+      <div class="tech-list-item">
+        <div class="text-muted" style="font-size:0.7rem;">Subject Beta (Exposed)</div>
+        <div class="fw-bold text-white mb-1">${contact.person2_name}</div>
+        <div class="text-muted font-monospace text-truncate" style="font-size: 0.68rem;">ID: ${contact.person2_id}</div>
+      </div>
+    </div>
+
+    <table class="table table-borderless table-sm text-light small mb-4">
+      <tbody>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+          <td class="text-muted py-2">Contact Duration:</td>
+          <td class="text-end text-white fw-bold py-2">${contact.duration.toFixed(1)} seconds</td>
+        </tr>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+          <td class="text-muted py-2">Proximity Average:</td>
+          <td class="text-end text-white fw-bold py-2">${contact.avg_proximity.toFixed(3)} m</td>
+        </tr>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+          <td class="text-muted py-2">Exposure Risk Factor:</td>
+          <td class="text-end text-white fw-bold py-2">${contact.exposure_score.toFixed(1)}%</td>
+        </tr>
+        <tr>
+          <td class="text-muted py-2">Detection Timestamp:</td>
+          <td class="text-end text-muted py-2" style="font-size:0.72rem;">${contact.start_time.substring(0, 16)}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="mt-auto pt-3 border-top" style="border-color: var(--border-glass) !important;">
+      <button class="btn btn-tech-glow w-100" onclick="sendManualPriorityAlert('${contact.person1_id}', 'exposure')">
+        <i class="fa fa-paper-plane me-1"></i>Dispatch Contact Warning
+      </button>
+    </div>
+  `;
+}
+
+// Reset right details body to default
+function resetDetailsPanel() {
+  document.getElementById('detailsBody').innerHTML = `
+    <div class="text-center text-muted py-5 mt-5">
+      <i class="fa fa-bullseye fa-3x mb-3 d-block opacity-25 text-info"></i>
+      <h6 class="fw-bold text-light mb-2">radar offline</h6>
+      <p class="small text-muted px-3">Select any person (node) or connection line (edge) on the map interface to view detailed risk analysis and logs.</p>
+    </div>
+  `;
+}
+
+// AJAX: Trigger custom SMTP Priority Email Alert
+async function sendManualPriorityAlert(patientId, type) {
+  const isOk = confirm(`Confirm dispatching manual priority alert notification for ${type === 'patient' ? 'Patient' : 'Exposure'} ID: ${patientId}?`);
+  if (!isOk) return;
+
+  try {
+    const r = await fetch('/api/send-custom-alert', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: type, patient_id: patientId })
+    });
+    const res = await r.json();
+    if (res.success) {
+      alert("🚨 Priority SMTP warning email alert triggered successfully in background thread!");
+    } else {
+      alert("❌ Failed to dispatch email alert: " + (res.error || "Unknown server error."));
+    }
+  } catch (e) {
+    alert("❌ Network/Service Error: " + e.toString());
+  }
+}
+
+// Map Controls Utility
+function togglePhysics() {
+  physicsEnabled = !physicsEnabled;
+  if (network) {
+    network.setOptions({ physics: { enabled: physicsEnabled } });
+    const btn = document.getElementById("physicsBtn");
+    if (physicsEnabled) {
+      btn.innerHTML = `<i class="fa fa-pause me-1"></i>Freeze Layout`;
+      btn.classList.remove("tech-btn-active");
+    } else {
+      btn.innerHTML = `<i class="fa fa-play me-1"></i>Resume Physics`;
+      btn.classList.add("tech-btn-active");
+    }
+  }
+}
+
+// Fit network view to window
+function fitView() {
+  if (network) network.fit({ animation: true });
+}
+
+// Zoom network in
+function zoomIn() {
+  if (network) {
+    const scale = network.getScale() * 1.25;
+    network.moveTo({ scale: scale, animation: true });
+  }
+}
+
+// Zoom network out
+function zoomOut() {
+  if (network) {
+    const scale = network.getScale() * 0.8;
+    network.moveTo({ scale: scale, animation: true });
+  }
+}
+</script>
+{% endblock %}

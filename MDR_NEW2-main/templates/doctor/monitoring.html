@@ -1,0 +1,318 @@
+{% extends "shared/base.html" %}
+{% block title %}Live Monitoring{% endblock %}
+{% block page_title %}Real-Time Face Recognition & Contact Tracing{% endblock %}
+{% block extra_head %}
+<style>
+#videoWrapper{position:relative;background:#0a0a0a;border-radius:12px;overflow:hidden;min-height:400px;}
+#liveVideo{width:100%;display:block;}
+#annotationCanvas{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;}
+.person-chip{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;margin-bottom:8px;border:1px solid;}
+.person-chip.mdr-positive{background:#fff5f5;border-color:#fca5a5;}
+.person-chip.mdr-negative{background:#f0fdf4;border-color:#86efac;}
+.person-chip.unknown{background:#f9fafb;border-color:#d1d5db;}
+.contact-chip{background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:10px 12px;margin-bottom:8px;}
+.stat-mini{text-align:center;padding:10px;border-radius:10px;background:#f8f9fa;}
+.stat-mini .num{font-size:1.5rem;font-weight:700;line-height:1;}
+.pulse-dot{width:10px;height:10px;border-radius:50%;background:#22c55e;animation:pulse 1.5s infinite;}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.5;transform:scale(1.4);}}
+#statusBar{background:#1e293b;color:#94a3b8;font-size:.78rem;padding:6px 12px;display:flex;align-items:center;gap:8px;}
+</style>
+{% endblock %}
+{% block content %}
+<div class="row g-3">
+  <!-- VIDEO FEED -->
+  <div class="col-xl-8">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center pt-3">
+        <div class="d-flex align-items-center gap-2">
+          <div class="pulse-dot" id="liveDot" style="background:#6b7280;animation:none;"></div>
+          <span class="fw-semibold">Live Camera Feed</span>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+          <select id="cameraSelect" class="form-select form-select-sm" style="width:160px;"></select>
+          <button id="startBtn" class="btn btn-sm btn-success" onclick="startCamera()">
+            <i class="fa fa-play me-1"></i>Start
+          </button>
+          <button id="stopBtn" class="btn btn-sm btn-danger d-none" onclick="stopCamera()">
+            <i class="fa fa-stop me-1"></i>Stop
+          </button>
+          <label class="btn btn-sm btn-outline-secondary mb-0" title="Upload video file">
+            <i class="fa fa-upload"></i>
+            <input type="file" id="videoFileInput" accept="video/*" class="d-none" onchange="loadVideoFile(this)"/>
+          </label>
+        </div>
+      </div>
+      <div id="videoWrapper">
+        <video id="liveVideo" autoplay muted playsinline></video>
+        <canvas id="annotationCanvas"></canvas>
+        <div id="noFeedMsg" class="d-flex align-items-center justify-content-center" style="position:absolute;inset:0;color:#6b7280;">
+          <div class="text-center">
+            <i class="fa fa-video fa-3x mb-3 d-block"></i>
+            <p class="mb-0">Press <b>Start</b> to begin live monitoring</p>
+            <p class="small mt-1">or upload a video file for analysis</p>
+          </div>
+        </div>
+      </div>
+      <div id="statusBar">
+        <span id="statusMsg">● Idle</span>
+        <span class="ms-auto" id="fpsCounter"></span>
+        <span id="frameCount"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- SIDE PANEL -->
+  <div class="col-xl-4">
+    <!-- Mini stats -->
+    <div class="row g-2 mb-3">
+      <div class="col-4"><div class="stat-mini"><div class="num text-primary" id="detectedCount">0</div><div style="font-size:.7rem;color:#6b7280;">Detected</div></div></div>
+      <div class="col-4"><div class="stat-mini"><div class="num text-danger" id="mdrCount">0</div><div style="font-size:.7rem;color:#6b7280;">MDR+</div></div></div>
+      <div class="col-4"><div class="stat-mini"><div class="num text-warning" id="contactCount">0</div><div style="font-size:.7rem;color:#6b7280;">Contacts</div></div></div>
+    </div>
+
+    <!-- Detected Persons -->
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header bg-white border-0 fw-semibold pt-3 pb-2 d-flex justify-content-between">
+        <span>Detected Persons</span>
+        <span class="badge bg-primary rounded-pill" id="personBadge">0</span>
+      </div>
+      <div class="card-body py-2 px-3" id="personList" style="min-height:100px;max-height:240px;overflow-y:auto;">
+        <div class="text-muted small text-center py-3">No persons detected</div>
+      </div>
+    </div>
+
+    <!-- Active Contacts -->
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header bg-white border-0 fw-semibold pt-3 pb-2 d-flex justify-content-between">
+        <span><i class="fa fa-link me-1 text-warning"></i>Active Contacts</span>
+        <span class="badge bg-warning text-dark rounded-pill" id="contactBadge">0</span>
+      </div>
+      <div class="card-body py-2 px-3" id="contactList" style="min-height:80px;max-height:180px;overflow-y:auto;">
+        <div class="text-muted small text-center py-3">No active contacts</div>
+      </div>
+    </div>
+
+    <!-- Completed contacts log -->
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white border-0 fw-semibold pt-3 pb-2">
+        <i class="fa fa-clock-rotate-left me-1 text-muted"></i>Recent Contact Events
+      </div>
+      <div class="card-body py-2 px-3" id="eventLog" style="min-height:60px;max-height:180px;overflow-y:auto;font-size:.78rem;">
+        {% for e in recent_events %}
+        <div class="py-1 border-bottom">
+          <span class="text-muted">
+            {% if e.get('start_time') and e.get('start_time').strftime %}
+              {{ e.get('start_time').strftime('%H:%M:%S') }}
+            {% else %}
+              {{ (e.get('start_time')|string)[11:19] }}
+            {% endif %}
+          </span> — 
+          Contact: {{ e.get('person1_name') }} ↔ {{ e.get('person2_name') }} ({{ e.get('duration',0)|round(1) }}s, {{ e.get('exposure_risk','Low') }} Risk)
+        </div>
+        {% else %}
+        <div class="text-muted text-center py-2">Events appear here…</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+let mediaStream=null, intervalId=null, frameNum=0, lastFrameTime=Date.now();
+const video=document.getElementById('liveVideo');
+const canvas=document.getElementById('annotationCanvas');
+const ctx=canvas.getContext('2d');
+let events=[];
+
+// Enumerate cameras
+(async()=>{
+  try{
+    const devices=await navigator.mediaDevices.enumerateDevices();
+    const sel=document.getElementById('cameraSelect');
+    devices.filter(d=>d.kind==='videoinput').forEach((d,i)=>{
+      const opt=document.createElement('option');
+      opt.value=d.deviceId; opt.text=d.label||`Camera ${i+1}`;
+      sel.appendChild(opt);
+    });
+  }catch(e){}
+})();
+
+async function startCamera(){
+  try{
+    const deviceId=document.getElementById('cameraSelect').value;
+    const constraints={video:deviceId?{deviceId:{exact:deviceId},width:640,height:480}:{width:640,height:480}};
+    mediaStream=await navigator.mediaDevices.getUserMedia(constraints);
+    video.srcObject=mediaStream;
+    video.onloadedmetadata=()=>{
+      canvas.width=video.videoWidth;
+      canvas.height=video.videoHeight;
+    };
+    document.getElementById('noFeedMsg').style.display='none';
+    document.getElementById('startBtn').classList.add('d-none');
+    document.getElementById('stopBtn').classList.remove('d-none');
+    const dot=document.getElementById('liveDot');
+    dot.style.background='#22c55e'; dot.style.animation='pulse 1.5s infinite';
+    setStatus('🟢 Live — capturing frames...');
+    intervalId=setInterval(processFrame, 700);
+  }catch(e){
+    alert('Camera error: '+e.message);
+  }
+}
+
+function loadVideoFile(input){
+  if(!input.files[0]) return;
+  const url=URL.createObjectURL(input.files[0]);
+  video.src=url; video.srcObject=null;
+  video.onloadedmetadata=()=>{canvas.width=video.videoWidth;canvas.height=video.videoHeight;};
+  document.getElementById('noFeedMsg').style.display='none';
+  document.getElementById('startBtn').classList.add('d-none');
+  document.getElementById('stopBtn').classList.remove('d-none');
+  const dot=document.getElementById('liveDot');
+  dot.style.background='#f59e0b'; dot.style.animation='pulse 1.5s infinite';
+  setStatus('📹 Video file loaded — analysing...');
+  video.play();
+  intervalId=setInterval(processFrame, 700);
+}
+
+function stopCamera(){
+  if(mediaStream) mediaStream.getTracks().forEach(t=>t.stop());
+  clearInterval(intervalId);
+  video.srcObject=null; video.src='';
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  document.getElementById('noFeedMsg').style.display='flex';
+  document.getElementById('startBtn').classList.remove('d-none');
+  document.getElementById('stopBtn').classList.add('d-none');
+  const dot=document.getElementById('liveDot');
+  dot.style.background='#6b7280'; dot.style.animation='none';
+  setStatus('● Idle');
+}
+
+async function processFrame(){
+  if(video.readyState < 2) return;
+  const offscreen=document.createElement('canvas');
+  offscreen.width=video.videoWidth||640;
+  offscreen.height=video.videoHeight||480;
+  offscreen.getContext('2d').drawImage(video,0,0);
+  const b64=offscreen.toDataURL('image/jpeg',0.65).split(',')[1];
+
+  try{
+    const res=await fetch('/doctor/api/process-frame',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({frame:b64})
+    });
+    const data=await res.json();
+    if(data.error){setStatus('⚠️ '+data.error);return;}
+
+    // Draw annotated frame
+    if(data.annotated_frame){
+      const img=new Image();
+      img.onload=()=>{
+        canvas.width=img.width; canvas.height=img.height;
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        ctx.drawImage(img,0,0);
+      };
+      img.src='data:image/jpeg;base64,'+data.annotated_frame;
+    }
+
+    updatePersonList(data.persons||[]);
+    updateContactList(data.active_contacts||[]);
+
+    if(data.completed_contacts>0){
+      addEvent(`${data.completed_contacts} contact(s) completed & saved`);
+    }
+
+    // FPS
+    frameNum++;
+    const now=Date.now();
+    const fps=(1000/(now-lastFrameTime)).toFixed(1);
+    lastFrameTime=now;
+    document.getElementById('fpsCounter').textContent=`${fps} fps`;
+    document.getElementById('frameCount').textContent=`Frame #${frameNum}`;
+
+  }catch(e){setStatus('❌ '+e.message);}
+}
+
+function updatePersonList(persons){
+  document.getElementById('detectedCount').textContent=persons.length;
+  document.getElementById('mdrCount').textContent=persons.filter(p=>p.mdr_status).length;
+  document.getElementById('personBadge').textContent=persons.length;
+
+  const el=document.getElementById('personList');
+  if(!persons.length){
+    el.innerHTML='<div class="text-muted small text-center py-2">No faces detected</div>';
+    return;
+  }
+  el.innerHTML=persons.map(p=>{
+    const cls=p.patient_id.startsWith('UNKNOWN')?'unknown':p.mdr_status?'mdr-positive':'mdr-negative';
+    const icon=p.mdr_status?'🔴':'🟢';
+    return `<div class="person-chip ${cls}">
+      <div style="font-size:1.2rem;">${icon}</div>
+      <div class="flex-grow-1">
+        <div class="fw-semibold small">${p.name}</div>
+        <div class="text-muted" style="font-size:.7rem;">${p.risk_level} Risk · ${p.confidence.toFixed(1)}% conf</div>
+      </div>
+      ${p.mdr_status?'<span class="badge badge-high" style="font-size:.65rem;">MDR+</span>':''}
+    </div>`;
+  }).join('');
+}
+
+function updateContactList(contacts){
+  document.getElementById('contactCount').textContent=contacts.length;
+  document.getElementById('contactBadge').textContent=contacts.length;
+  const el=document.getElementById('contactList');
+  if(!contacts.length){
+    el.innerHTML='<div class="text-muted small text-center py-2">No active contacts</div>';
+    return;
+  }
+  el.innerHTML=contacts.map(c=>{
+    const risk = c.exposure_risk || 'Low';
+    const badgeCls = risk === 'High' ? 'danger' : risk === 'Medium' ? 'warning text-dark' : 'success';
+    return `
+      <div class="contact-chip">
+        <div class="small fw-semibold d-flex justify-content-between align-items-center">
+          <span>⚠️ ${c.person1_name} ↔ ${c.person2_name}</span>
+          <span class="badge bg-${badgeCls} rounded-pill" style="font-size:0.65rem;">
+            ${risk} Risk
+          </span>
+        </div>
+        <div class="text-muted d-flex justify-content-between mt-1" style="font-size:.7rem;">
+          <span>Duration: ${(c.duration||0).toFixed(1)}s</span>
+          <span>Score: ${(c.exposure_score||0).toFixed(1)}%</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function addEvent(msg){
+  const el=document.getElementById('eventLog');
+  const placeholder=el.querySelector('.text-muted.text-center');
+  if(placeholder) el.innerHTML='';
+  
+  const time=new Date().toLocaleTimeString();
+  const div=document.createElement('div');
+  div.className='py-1 border-bottom';
+  div.innerHTML=`<span class="text-muted">${time}</span> — ${msg}`;
+  el.insertBefore(div, el.firstChild);
+  
+  while(el.children.length>20){
+    el.removeChild(el.lastChild);
+  }
+}
+
+function setStatus(msg){
+  document.getElementById('statusMsg').textContent=msg;
+}
+
+// Poll active contacts from server every 5s
+setInterval(async()=>{
+  try{
+    const r=await fetch('/doctor/api/active-contacts');
+    const d=await r.json();
+    // Supplementary server-side contact data
+  }catch(e){}
+},5000);
+</script>
+{% endblock %}

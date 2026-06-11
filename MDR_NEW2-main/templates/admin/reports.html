@@ -1,0 +1,330 @@
+{% extends "shared/base.html" %}
+{% block title %}Medical Reports{% endblock %}
+{% block page_title %}System PDF Reports{% endblock %}
+{% block extra_head %}
+<style>
+  .reports-control-bar {
+    background: #fff;
+    border-radius: 12px;
+    padding: 16px 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    margin-bottom: 24px;
+    border: 1px solid #e2e8f0;
+  }
+
+  /* Filter Tabs */
+  .reports-tabs {
+    border-bottom: 2px solid #e2e8f0;
+    margin-bottom: 20px;
+  }
+  .reports-tab-link {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 10px 20px;
+    font-weight: 600;
+    color: #64748b;
+    transition: all 0.2s;
+    font-size: 0.9rem;
+    position: relative;
+    outline: none;
+  }
+  .reports-tab-link:hover {
+    color: var(--accent);
+  }
+  .reports-tab-link.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+  .reports-badge-count {
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    margin-left: 6px;
+  }
+
+  /* Report Card Styling */
+  .report-card-wrapper {
+    transition: all 0.25s ease;
+  }
+  .report-card-wrapper:hover {
+    transform: scale(1.02);
+  }
+
+  .report-card-tech {
+    background: #ffffff;
+    border-radius: 14px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+  .report-card-tech::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 6px;
+    height: 100%;
+  }
+
+  /* Colors based on Report Type */
+  .report-card-tech.type-diagnostic::before { background: linear-gradient(180deg, #3b82f6, #1d4ed8); }
+  .report-card-tech.type-exposure::before { background: linear-gradient(180deg, #f59e0b, #ea580c); }
+
+  .file-icon-wrapper {
+    width: 46px;
+    height: 46px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    flex-shrink: 0;
+  }
+  .file-icon-wrapper.type-diagnostic { background: rgba(59, 130, 246, 0.08); color: #2563eb; }
+  .file-icon-wrapper.type-exposure { background: rgba(245, 158, 11, 0.08); color: #ea580c; }
+
+  .btn-download-report {
+    background: rgba(220, 53, 69, 0.08);
+    border: 1px solid rgba(220, 53, 69, 0.2);
+    color: #dc3545;
+    font-weight: 600;
+    transition: all 0.2s;
+    font-size: 0.82rem;
+    padding: 6px 14px;
+    border-radius: 6px;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .btn-download-report:hover {
+    background: #dc3545;
+    color: #fff !important;
+    box-shadow: 0 4px 10px rgba(220, 53, 69, 0.25);
+  }
+
+  .tech-info-pill {
+    background: #f1f5f9;
+    border-radius: 8px;
+    padding: 10px 14px;
+    border: 1px solid #e2e8f0;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Filtering & Search Control Header -->
+<div class="reports-control-bar d-flex flex-wrap align-items-center justify-content-between gap-3">
+  <div class="d-flex align-items-center gap-2">
+    <i class="fa fa-sliders text-primary me-1"></i>
+    <span class="fw-semibold text-dark">Radar Filters</span>
+  </div>
+  <div class="d-flex align-items-center gap-2 flex-grow-1 flex-md-grow-0" style="max-width:320px;">
+    <div class="input-group">
+      <span class="input-group-text bg-light border-end-0"><i class="fa fa-search text-muted small"></i></span>
+      <input type="text" id="reportsSearch" class="form-control border-start-0 bg-light" placeholder="Search patient or ID..." oninput="filterReports()">
+    </div>
+  </div>
+</div>
+
+<!-- Category Tabs -->
+<div class="d-flex reports-tabs" role="tablist">
+  <button class="reports-tab-link active" onclick="switchTab('all', this)">
+    All Reports
+    <span class="alerts-badge-count bg-primary text-light" id="cntAll">0</span>
+  </button>
+  <button class="reports-tab-link" onclick="switchTab('diagnostic', this)">
+    Diagnostic Cases
+    <span class="alerts-badge-count bg-info text-light" id="cntDiagnostic">0</span>
+  </button>
+  <button class="reports-tab-link" onclick="switchTab('exposure', this)">
+    Exposure Traces
+    <span class="alerts-badge-count bg-warning text-dark" id="cntExposure">0</span>
+  </button>
+</div>
+
+<!-- Reports Grid -->
+<div class="row g-3" id="reportsGrid">
+  <!-- Dynamic cards inserted here by JS -->
+</div>
+
+<!-- Empty state -->
+<div id="reportsEmptyState" class="d-none col-12 text-center text-muted py-5 my-4">
+  <i class="fa fa-file-excel fa-3x mb-3 d-block opacity-25 text-primary"></i>
+  <h5 class="fw-semibold text-dark">No Reports Found</h5>
+  <p class="small">No medical reports match the selected filters.</p>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Serialize MongoDB reports list
+const rawReports = [
+  {% for r in reports %}
+  {
+    report_id: "{{ r.get('report_id','') }}",
+    patient_id: "{{ r.get('patient_id','') }}",
+    patient_name: "{{ r.get('patient_name','Unknown') }}",
+    filename: "{{ r.get('filename','') }}",
+    generated_by: "{{ r.get('generated_by','—') }}",
+    created_at: "{{ (r.get('created_at','')|string)[:16] if r.get('created_at') else '' }}",
+    
+    // Explicit report type with dynamic fallbacks for historical records
+    report_type: "{{ r.get('report_type') or ('Exposure Report' if (r.get('generated_by') == 'system' or 'contact' in r.get('filename','').lower() or r.get('contact_person_id')) else 'Diagnostic Report') }}",
+    
+    // Contact exposure details
+    contact_person_id: "{{ r.get('contact_person_id','') }}",
+    contact_person_name: "{{ r.get('contact_person_name','') }}"
+  }{% if not loop.last %},{% endif %}
+  {% endfor %}
+];
+
+let currentFilter = "all";
+
+document.addEventListener("DOMContentLoaded", () => {
+  renderReportsGrid();
+});
+
+function calculateTotals() {
+  const allCount = rawReports.length;
+  const diagCount = rawAlertsFilteredCount("Diagnostic Report");
+  const expCount = rawAlertsFilteredCount("Exposure Report");
+
+  document.getElementById("cntAll").innerText = allCount;
+  document.getElementById("cntDiagnostic").innerText = diagCount;
+  document.getElementById("cntExposure").innerText = expCount;
+}
+
+function rawAlertsFilteredCount(type) {
+  return rawReports.filter(r => r.report_type === type).length;
+}
+
+function renderReportsGrid() {
+  calculateTotals();
+  
+  const grid = document.getElementById("reportsGrid");
+  const emptyState = document.getElementById("reportsEmptyState");
+  const searchVal = document.getElementById("reportsSearch").value.toLowerCase().trim();
+  
+  grid.innerHTML = "";
+
+  const filtered = rawReports.filter(r => {
+    // 1. Tab filter
+    if (currentFilter === "diagnostic" && r.report_type !== "Diagnostic Report") return false;
+    if (currentFilter === "exposure" && r.report_type !== "Exposure Report") return false;
+
+    // 2. Search filter
+    if (searchVal) {
+      return r.patient_name.toLowerCase().includes(searchVal) || 
+             r.patient_id.toLowerCase().includes(searchVal) || 
+             r.report_id.toLowerCase().includes(searchVal) ||
+             r.contact_person_name.toLowerCase().includes(searchVal) ||
+             r.contact_person_id.toLowerCase().includes(searchVal);
+    }
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    emptyState.classList.remove("d-none");
+    return;
+  }
+  emptyState.classList.add("d-none");
+
+  filtered.forEach(r => {
+    const isExposure = r.report_type === "Exposure Report";
+    const typeClass = isExposure ? "type-exposure" : "type-diagnostic";
+    const faIcon = isExposure ? "fa-file-medical" : "fa-file-waveform";
+    
+    // Choose badge
+    const badgeHTML = isExposure 
+      ? `<span class="badge bg-warning text-dark small"><i class="fa fa-people-arrows me-1"></i>EXPOSURE TRACE</span>`
+      : `<span class="badge bg-primary text-light small"><i class="fa fa-heart-pulse me-1"></i>DIAGNOSTIC</span>`;
+
+    const cardHTML = `
+      <div class="col-12 col-md-6 col-lg-4 report-card-wrapper">
+        <div class="report-card-tech ${typeClass}">
+          <div class="card-body p-3 d-flex flex-column">
+            
+            <div class="d-flex align-items-center gap-3 mb-3">
+              <div class="file-icon-wrapper ${typeClass}">
+                <i class="fa ${faIcon}"></i>
+              </div>
+              <div class="flex-grow-1 min-w-0">
+                <h6 class="fw-bold text-dark mb-0 text-truncate">${r.patient_name}</h6>
+                <span class="text-muted font-monospace" style="font-size:0.75rem;">ID: ${r.patient_id || 'N/A'}</span>
+              </div>
+              <div>
+                ${badgeHTML}
+              </div>
+            </div>
+
+            <!-- Report Details Summary Box -->
+            <div class="tech-info-pill mb-3">
+              <div class="d-flex justify-content-between small text-muted mb-1">
+                <span>File Reference:</span>
+                <span class="fw-bold text-dark font-monospace">${r.report_id}</span>
+              </div>
+              <div class="d-flex justify-content-between small text-muted">
+                <span>Created By:</span>
+                <span class="text-dark fw-semibold">${r.generated_by}</span>
+              </div>
+            </div>
+
+            ${isExposure ? `
+            <div class="mb-3 px-3 py-2 rounded bg-warning-subtle border border-warning-subtle" style="background:#fffbeb;">
+              <div class="d-flex align-items-center gap-2">
+                <i class="fa fa-user-secret text-warning" style="font-size:0.9rem;"></i>
+                <div>
+                  <div class="text-muted" style="font-size:0.65rem; font-weight:600; text-transform:uppercase;">Exposed Entity / Contact</div>
+                  <div class="fw-bold text-dark small" style="font-size:0.78rem;">
+                    ${r.contact_person_name || 'Unregistered Person'} 
+                    <span class="text-muted fw-normal font-monospace" style="font-size:0.7rem;">(${r.contact_person_id || 'UNKNOWN'})</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            ` : `
+            <div class="mb-3 px-3 py-2 rounded bg-light border border-light" style="min-height: 48px;">
+              <div class="d-flex align-items-center gap-2">
+                <i class="fa fa-circle-info text-info" style="font-size:0.9rem;"></i>
+                <div>
+                  <div class="text-muted" style="font-size:0.65rem; font-weight:600; text-transform:uppercase;">Assessment notes</div>
+                  <div class="text-secondary" style="font-size:0.75rem;">Standard diagnostic risk model file export.</div>
+                </div>
+              </div>
+            </div>
+            `}
+
+            <div class="d-flex justify-content-between align-items-center pt-2 mt-auto border-top border-light">
+              <span class="small text-muted font-monospace" style="font-size:0.7rem;"><i class="fa-regular fa-calendar-days me-1"></i>${r.created_at}</span>
+              <a href="/admin/reports/download/${r.report_id}" class="btn-download-report">
+                <i class="fa fa-download"></i>PDF
+              </a>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    `;
+    grid.insertAdjacentHTML("beforeend", cardHTML);
+  });
+}
+
+function filterReports() {
+  renderReportsGrid();
+}
+
+function switchTab(tab, element) {
+  currentFilter = tab;
+  document.querySelectorAll(".reports-tab-link").forEach(l => l.classList.remove("active"));
+  element.classList.add("active");
+  renderReportsGrid();
+}
+</script>
+{% endblock %}

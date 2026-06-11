@@ -1,0 +1,139 @@
+{% extends "shared/base.html" %}
+{% block title %}My Medical Records{% endblock %}
+{% block page_title %}My Medical Records{% endblock %}
+{% block content %}
+{% if patient %}
+<div class="row g-3">
+  <div class="col-lg-4">
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-body text-center py-4">
+        <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3" style="width:80px;height:80px;background:#dbeafe;">
+          <i class="fa fa-user fa-2x" style="color:#2563eb;"></i>
+        </div>
+        <h5 class="fw-bold">{{ patient.get('name','—') }}</h5>
+        <div class="text-muted small mb-2">{{ patient.get('patient_id','—') }}</div>
+        {% if patient.get('mdr_status') == 1 %}
+          <span class="badge badge-high px-3 py-2">⚠️ MDR Positive</span>
+        {% else %}
+          <span class="badge badge-low px-3 py-2">✅ MDR Negative</span>
+        {% endif %}
+      </div>
+      <div class="card-body pt-0">
+        {% set fields = [
+          ('Age', patient.get('age','—')),
+          ('Gender', patient.get('gender','—')),
+          ('Ward', patient.get('ward_type','—')),
+          ('Infection', patient.get('infection_type','—')),
+          ('Pathogen', patient.get('pathogen_type','—')),
+          ('Doctor', patient.get('assigned_doctor','—')),
+        ] %}
+        {% for lbl, val in fields %}
+        <div class="d-flex justify-content-between py-2 border-bottom">
+          <span class="text-muted small">{{ lbl }}</span>
+          <span class="small fw-semibold">{{ val }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-8">
+    {% if prediction %}
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header bg-white border-0 fw-semibold pt-3">MDR Risk Prediction Result</div>
+      <div class="card-body">
+        <div class="d-flex align-items-center gap-4 mb-3">
+          <div class="text-center">
+            <div class="fs-1 fw-bold" style="color:{% if prediction.risk_classification=='High' %}#dc3545{% elif prediction.risk_classification=='Medium' %}#ffc107{% else %}#198754{% endif %};">
+              {{ prediction.get('risk_score_pct','0') }}%
+            </div>
+            <span class="badge badge-{{ prediction.get('risk_classification','Low')|lower }} fs-6">
+              {{ prediction.get('risk_classification','—') }} Risk
+            </span>
+          </div>
+          <div class="flex-grow-1">
+            <div class="small text-muted mb-1">Model: {{ prediction.get('model_used','XGBoost') }}</div>
+            <div class="small {% if prediction.get('isolation_recommended') %}text-danger fw-semibold{% else %}text-success{% endif %}">
+              Isolation: {{ 'Required' if prediction.get('isolation_recommended') else 'Not Required' }}
+            </div>
+            <div class="small {% if prediction.get('culture_test_recommended') %}text-warning fw-semibold{% else %}text-success{% endif %}">
+              Culture Test: {{ 'Required' if prediction.get('culture_test_recommended') else 'Not Required' }}
+            </div>
+          </div>
+        </div>
+        {% if prediction.get('clinical_suggestions') %}
+        <div class="fw-semibold small mb-2">Recommendations for You</div>
+        {% for s in prediction.clinical_suggestions %}
+        <div class="small p-2 mb-1 rounded" style="background:#f0f9ff;border-left:3px solid #2563eb;">{{ s }}</div>
+        {% endfor %}
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header bg-white border-0 fw-semibold pt-3">Contact History</div>
+      <div class="card-body p-0" style="max-height:200px;overflow-y:auto;">
+        {% if contacts %}
+        <table class="table table-sm mb-0">
+          <thead style="position:sticky;top:0;background:#f8f9fa;"><tr><th>Contact With</th><th>Duration</th><th>Exposure Risk</th><th>Date</th></tr></thead>
+          <tbody>
+            {% for c in contacts %}
+            <tr>
+              <td class="small">{{ c.get('person2_name') or c.get('person1_name','—') }}</td>
+              <td class="small">{{ '%.1f'|format(c.get('duration',0)) }}s</td>
+              <td><span class="badge badge-{{ c.get('exposure_risk','Low')|lower }}">{{ c.get('exposure_risk','Low') }}</span></td>
+              <td class="small text-muted">{{ (c.get('start_time','')|string)[:10] if c.get('start_time') else '' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="text-center text-muted py-4">No contact events found</div>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if reports %}
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white border-0 fw-semibold pt-3">My Reports</div>
+      <div class="card-body p-0">
+        {% for r in reports %}
+        <div class="d-flex align-items-center justify-content-between p-3 border-bottom">
+          <div>
+            {% set is_exposure = r.get('report_type') == 'Exposure Report' or r.get('contact_person_id') or r.get('generated_by') == 'system' or 'contact' in r.get('filename','').lower() %}
+            <div class="small fw-semibold d-flex align-items-center gap-2">
+              <i class="fa {% if is_exposure %}fa-people-arrows text-warning{% else %}fa-file-medical text-primary{% endif %}" style="font-size: 0.9rem;"></i>
+              <span>{% if is_exposure %}Exposure Trace Alert{% else %}Diagnostic Assessment Report{% endif %}</span>
+              <span class="badge {% if is_exposure %}bg-warning text-dark{% else %}bg-primary{% endif %} px-2" style="font-size: 0.65rem;">
+                {{ r.get('report_id','') }}
+              </span>
+            </div>
+            <div class="text-muted mt-1" style="font-size:.72rem;">
+              {% if is_exposure %}
+                {% set target_name = r.get('contact_person_name') or 'Unregistered Entity' %}
+                {% set target_id = r.get('contact_person_id') or 'UNKNOWN' %}
+                <span class="text-secondary"><i class="fa fa-user-secret me-1"></i>Contact Target: <strong>{{ target_name }}</strong> (${{ target_id }})</span>
+                <br>
+              {% endif %}
+              <span>{{ (r.get('created_at','')|string)[:10] if r.get('created_at') else '' }}</span>
+            </div>
+          </div>
+          <span class="badge bg-secondary small px-3 py-2">Available via Doctor</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% else %}
+<div class="card border-0 shadow-sm text-center py-5">
+  <div class="card-body">
+    <i class="fa fa-file-medical fa-4x mb-3 d-block" style="color:#e5e7eb;"></i>
+    <h5>No Patient Record Found</h5>
+    <p class="text-muted">Your account hasn't been linked to a patient record yet. Contact your doctor.</p>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

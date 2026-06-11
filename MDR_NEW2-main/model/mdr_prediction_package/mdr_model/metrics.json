@@ -1,0 +1,103 @@
+{
+  "random_forest": {
+    "accuracy": 1.0,
+    "auc_roc": 1.0,
+    "f1": 1.0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "cv_auc_mean": 1.0,
+    "cv_auc_std": 0.0
+  },
+  "xgboost": {
+    "accuracy": 1.0,
+    "auc_roc": 1.0,
+    "f1": 1.0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "cv_auc_mean": 1.0,
+    "cv_auc_std": 0.0
+  },
+  "winner": "XGBoost",
+  "feature_columns": [
+    "Age",
+    "Gender",
+    "Length_of_Hospital_Stay",
+    "ICU_Admission",
+    "Previous_Hospitalization",
+    "Previous_MDR_Infection",
+    "Antibiotic_Use_Last_90_Days",
+    "Number_of_Antibiotics_Used",
+    "Duration_of_Antibiotic_Use",
+    "Recent_Surgery",
+    "Chronic_Disease",
+    "Diabetes",
+    "Kidney_Disease",
+    "Immunocompromised",
+    "Mechanical_Ventilation",
+    "Catheter_Use",
+    "Infection_Type",
+    "Pathogen_Type",
+    "White_Blood_Cell_Count",
+    "C_Reactive_Protein",
+    "Fever",
+    "Culture_Test_Positive",
+    "Prior_Antibiotic_Failure",
+    "Ward_Type",
+    "Contact_With_MDR_Patient"
+  ],
+  "categorical_columns": [
+    "Gender",
+    "Infection_Type",
+    "Pathogen_Type",
+    "Ward_Type"
+  ],
+  "categorical_classes": {
+    "Gender": [
+      "Female",
+      "Male"
+    ],
+    "Infection_Type": [
+      "Bloodstream",
+      "Pneumonia",
+      "Respiratory",
+      "UTI",
+      "Wound"
+    ],
+    "Pathogen_Type": [
+      "Acinetobacter",
+      "E. coli",
+      "Klebsiella",
+      "MRSA",
+      "Pseudomonas"
+    ],
+    "Ward_Type": [
+      "Emergency",
+      "General",
+      "ICU"
+    ]
+  },
+  "top10_features_rf": {
+    "Length_of_Hospital_Stay": 0.3174,
+    "Duration_of_Antibiotic_Use": 0.2132,
+    "C_Reactive_Protein": 0.125,
+    "Number_of_Antibiotics_Used": 0.1215,
+    "White_Blood_Cell_Count": 0.1119,
+    "Previous_MDR_Infection": 0.0283,
+    "Prior_Antibiotic_Failure": 0.0277,
+    "ICU_Admission": 0.0147,
+    "Previous_Hospitalization": 0.0134,
+    "Contact_With_MDR_Patient": 0.0082
+  },
+  "top10_features_xgb": {
+    "Length_of_Hospital_Stay": 0.640999972820282,
+    "Duration_of_Antibiotic_Use": 0.1662999987602234,
+    "C_Reactive_Protein": 0.07169999927282333,
+    "Number_of_Antibiotics_Used": 0.06040000170469284,
+    "Previous_MDR_Infection": 0.023099999874830246,
+    "Age": 0.014299999922513962,
+    "ICU_Admission": 0.010900000110268593,
+    "White_Blood_Cell_Count": 0.007000000216066837,
+    "Antibiotic_Use_Last_90_Days": 0.0019000000320374966,
+    "Contact_With_MDR_Patient": 0.0012000000569969416
+  }
+}

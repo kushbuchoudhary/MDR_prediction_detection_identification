@@ -1,0 +1,45 @@
+{% extends "shared/base.html" %}
+{% block title %}User Management{% endblock %}
+{% block page_title %}User Management{% endblock %}
+{% block content %}
+<div class="card border-0 shadow-sm">
+  <div class="card-header bg-white border-0 fw-semibold pt-3">Registered Users</div>
+  <div class="card-body p-0">
+    <table class="table table-custom table-hover mb-0">
+      <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Last Login</th><th>Action</th></tr></thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td class="fw-semibold">{{ u.get('name','—') }}</td>
+          <td>{{ u.get('username','—') }}</td>
+          <td class="text-muted small">{{ u.get('email','—') }}</td>
+          <td>
+            <span class="badge {% if u.get('role')=='admin' %}bg-danger{% elif u.get('role')=='doctor' %}bg-primary{% else %}bg-success{% endif %}">
+              {{ u.get('role','—')|capitalize }}
+            </span>
+          </td>
+          <td>
+            {% if u.get('is_active', True) %}
+              <span class="badge bg-success">Active</span>
+            {% else %}
+              <span class="badge bg-secondary">Inactive</span>
+            {% endif %}
+          </td>
+          <td class="text-muted small">{{ u.get('last_login','—') }}</td>
+          <td>
+            <form method="POST" action="{{ url_for('admin.toggle_user', user_id=u._id) }}" style="display:inline;">
+              <button type="submit" class="btn btn-xs btn-{{ 'outline-warning' if u.get('is_active',True) else 'outline-success' }}"
+                style="font-size:.75rem;padding:2px 8px;">
+                {{ 'Deactivate' if u.get('is_active',True) else 'Activate' }}
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="text-center text-muted py-5">No users found</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

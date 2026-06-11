@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Sign Up — MDR Surveillance</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet"/>
+<style>
+body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#090514,#1e1b4b);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+.auth-card{background:#fff;border-radius:20px;padding:40px;width:100%;max-width:460px;box-shadow:0 20px 60px rgba(0,0,0,.45);}
+.brand{text-align:center;margin-bottom:24px;}
+.brand-icon{width:56px;height:56px;background:linear-gradient(135deg,#4f46e5,#8b5cf6);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:1.5rem;color:#fff;margin:0 auto 10px;box-shadow:0 8px 16px rgba(99,102,241,0.25);}
+.form-label{font-weight:600;font-size:.85rem;color:#374151;}
+.form-control,.form-select{border-radius:10px;border:1.5px solid #e5e7eb;padding:10px 14px;font-size:.9rem;}
+.form-control:focus,.form-select:focus{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.12);}
+.btn-signup{background:linear-gradient(135deg,#4f46e5,#8b5cf6);border:none;border-radius:10px;padding:12px;font-weight:600;width:100%;box-shadow:0 4px 12px rgba(99,102,241,0.25);}
+.btn-signup:hover{box-shadow:0 4px 18px rgba(99,102,241,0.45);transform:translateY(-1px);}
+.alert{border-radius:10px;font-size:.875rem;}
+</style>
+</head>
+<body>
+<div class="auth-card">
+  <div class="brand">
+    <div class="brand-icon"><i class="fa fa-shield-virus"></i></div>
+    <h2 style="font-size:1.3rem;font-weight:700;color:#1a3a5c;">Create Account</h2>
+    <p style="color:#6b7280;font-size:.875rem;">Join the MDR Surveillance System</p>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="alert alert-{{ 'success' if cat=='success' else 'danger' if cat=='danger' else 'warning' }}">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <form method="POST">
+    <div class="row g-3">
+      <div class="col-12">
+        <label class="form-label">Full Name</label>
+        <input type="text" class="form-control" name="name" placeholder="Dr. John Smith" required/>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Username</label>
+        <input type="text" class="form-control" name="username" placeholder="johndoe" required/>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Role</label>
+        <select class="form-select" name="role" required>
+          <option value="user">Patient / User</option>
+          <option value="doctor">Doctor</option>
+          <option value="admin">Administrator</option>
+        </select>
+      </div>
+      <div class="col-12">
+        <label class="form-label">Email Address</label>
+        <input type="email" class="form-control" name="email" placeholder="john@hospital.com" required/>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Password</label>
+        <input type="password" class="form-control" name="password" placeholder="Min 6 chars" required minlength="6"/>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Confirm Password</label>
+        <input type="password" class="form-control" name="confirm_password" placeholder="Repeat password" required/>
+      </div>
+    </div>
+    <div class="mt-4">
+      <button type="submit" class="btn btn-signup text-white"><i class="fa fa-user-plus me-2"></i>Create Account</button>
+    </div>
+  </form>
+  <div class="text-center mt-3" style="font-size:.875rem;color:#6b7280;">
+    Already have an account? <a href="{{ url_for('auth.login') }}" style="color:#6366f1;font-weight:600;">Sign in</a>
+  </div>
+  <div class="text-center mt-1" style="font-size:.875rem;">
+    <a href="{{ url_for('auth.landing') }}" style="color:#6b7280;"><i class="fa fa-arrow-left me-1"></i>Back to Home</a>
+  </div>
+</div>
+</body>
+</html>

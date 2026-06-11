@@ -1,0 +1,272 @@
+{% extends "shared/base.html" %}
+{% block title %}My Alerts{% endblock %}
+{% block page_title %}My Medical & Radar Alerts{% endblock %}
+{% block extra_head %}
+<style>
+  .alerts-control-bar {
+    background: #fff;
+    border-radius: 12px;
+    padding: 16px 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    margin-bottom: 24px;
+    border: 1px solid #e2e8f0;
+  }
+
+  /* Filter Tabs */
+  .alerts-tabs {
+    border-bottom: 2px solid #e2e8f0;
+    margin-bottom: 20px;
+  }
+  .alerts-tab-link {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 10px 20px;
+    font-weight: 600;
+    color: #64748b;
+    transition: all 0.2s;
+    font-size: 0.9rem;
+    position: relative;
+    outline: none;
+  }
+  .alerts-tab-link:hover {
+    color: var(--accent);
+  }
+  .alerts-tab-link.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+  .alerts-badge-count {
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    margin-left: 6px;
+  }
+
+  /* Alert Card Styling */
+  .alert-card-wrapper {
+    transition: all 0.25s ease;
+  }
+  .alert-card-wrapper:hover {
+    transform: scale(1.02);
+  }
+
+  .alert-card-tech {
+    background: #ffffff;
+    border-radius: 14px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+    height: 100%;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+  .alert-card-tech::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 6px;
+    height: 100%;
+  }
+
+  /* Critical */
+  .alert-card-tech.level-critical { border-color: rgba(239, 68, 68, 0.15); }
+  .alert-card-tech.level-critical::before { background: linear-gradient(180deg, #ef4444, #b91c1c); }
+  .alert-icon-wrapper.level-critical { background: rgba(239, 68, 68, 0.08); color: #ef4444; }
+
+  /* Warning */
+  .alert-card-tech.level-warning { border-color: rgba(245, 158, 11, 0.15); }
+  .alert-card-tech.level-warning::before { background: linear-gradient(180deg, #f59e0b, #d97706); }
+  .alert-icon-wrapper.level-warning { background: rgba(245, 158, 11, 0.08); color: #d97706; }
+
+  /* Info/Dismissed */
+  .alert-card-tech.level-info, .alert-card-tech.dismissed { border-color: rgba(100, 116, 139, 0.15); }
+  .alert-card-tech.level-info::before { background: linear-gradient(180deg, #3b82f6, #1d4ed8); }
+  .alert-card-tech.dismissed::before { background: #94a3b8; }
+  .alert-icon-wrapper.level-info { background: rgba(59, 130, 246, 0.08); color: #2563eb; }
+  .alert-icon-wrapper.dismissed { background: rgba(148, 163, 184, 0.08); color: #64748b; }
+
+  .alert-icon-wrapper {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.15rem;
+    flex-shrink: 0;
+  }
+
+  .risk-progress-bar {
+    height: 6px;
+    border-radius: 4px;
+    background: #f1f5f9;
+    overflow: hidden;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Filtering Header -->
+<div class="alerts-control-bar d-flex flex-wrap align-items-center justify-content-between gap-3">
+  <div class="d-flex align-items-center gap-2">
+    <i class="fa fa-bell text-primary me-1"></i>
+    <span class="fw-semibold text-dark">Personal Alert Stream</span>
+  </div>
+  <div class="text-muted small">
+    Assigned Patient ID: <span class="fw-bold text-dark font-monospace">{{ patient.get('patient_id','Not Linked') if patient else 'Not Linked' }}</span>
+  </div>
+</div>
+
+<!-- Category Tabs -->
+<div class="d-flex alerts-tabs" role="tablist">
+  <button class="alerts-tab-link active" onclick="switchTab('active', this)">
+    Active Alerts
+    <span class="alerts-badge-count bg-warning text-dark" id="cntActive">0</span>
+  </button>
+  <button class="alerts-tab-link" onclick="switchTab('dismissed', this)">
+    Resolved logs
+    <span class="alerts-badge-count bg-secondary text-light" id="cntDismissed">0</span>
+  </button>
+</div>
+
+<!-- Alerts Grid Container -->
+<div class="row g-3" id="alertsGrid">
+  <!-- Dynamic cards inserted here by JS -->
+</div>
+
+<!-- Empty state template -->
+<div id="alertsEmptyState" class="d-none col-12 text-center text-muted py-5 my-4">
+  <i class="fa fa-bell-slash fa-3x mb-3 d-block opacity-25 text-primary"></i>
+  <h5 class="fw-semibold text-dark">All Secure</h5>
+  <p class="small">No alerts recorded under this category.</p>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Serialize Patient Alerts
+const rawAlerts = [
+  {% for a in alerts %}
+  {
+    id: "{{ a._id }}",
+    patient_name: "{{ a.get('patient_name','Unknown') }}",
+    patient_id: "{{ a.get('patient_id','') }}",
+    alert_level: "{{ a.get('alert_level','INFO') }}",
+    message: "{{ a.get('message','') }}",
+    assigned_doctor: "{{ a.get('assigned_doctor','—') }}",
+    status: "{{ a.get('status','active') }}",
+    created_at: "{{ (a.get('created_at','')|string)[:16] if a.get('created_at') else '' }}"
+  }{% if not loop.last %},{% endif %}
+  {% endfor %}
+];
+
+let currentFilter = "active";
+
+document.addEventListener("DOMContentLoaded", () => {
+  renderAlertsGrid();
+});
+
+function calculateTotals() {
+  const activeCount = rawAlerts.filter(a => a.status === 'active').length;
+  const dismissedCount = rawAlerts.filter(a => a.status === 'dismissed').length;
+
+  document.getElementById("cntActive").innerText = activeCount;
+  document.getElementById("cntDismissed").innerText = dismissedCount;
+}
+
+function renderAlertsGrid() {
+  calculateTotals();
+  
+  const grid = document.getElementById("alertsGrid");
+  const emptyState = document.getElementById("alertsEmptyState");
+  
+  grid.innerHTML = "";
+
+  const filtered = rawAlerts.filter(a => {
+    if (currentFilter === "active" && a.status !== "active") return false;
+    if (currentFilter === "dismissed" && a.status !== "dismissed") return false;
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    emptyState.classList.remove("d-none");
+    return;
+  }
+  emptyState.classList.add("d-none");
+
+  filtered.forEach(a => {
+    let progressPct = 0;
+    const pctMatch = a.message.match(/(\d+(\.\d+)?)\%/);
+    if (pctMatch) progressPct = parseFloat(pctMatch[1]);
+
+    const isDismissed = a.status === "dismissed";
+    const levelClass = isDismissed ? "dismissed" : ("level-" + a.alert_level.toLowerCase());
+    const isContactAlert = a.message.includes("contact");
+    
+    let faIcon = "fa-biohazard";
+    if (isDismissed) faIcon = "fa-circle-check";
+    else if (isContactAlert) faIcon = "fa-people-arrows";
+    else if (a.alert_level === "CRITICAL") faIcon = "fa-triangle-exclamation";
+
+    const cardHTML = `
+      <div class="col-12 col-md-6 col-lg-4 alert-card-wrapper">
+        <div class="alert-card-tech ${levelClass}">
+          <div class="card-body p-3 flex-grow-1">
+            <div class="d-flex align-items-center gap-3 mb-3">
+              <div class="alert-icon-wrapper ${levelClass}">
+                <i class="fa ${faIcon}"></i>
+              </div>
+              <div class="flex-grow-1 min-w-0">
+                <h6 class="fw-bold text-dark mb-0 text-truncate">${a.patient_name}</h6>
+                <span class="text-muted font-monospace" style="font-size:0.75rem;">ID: ${a.patient_id || 'N/A'}</span>
+              </div>
+              <div>
+                <span class="badge ${a.alert_level === 'CRITICAL' ? 'bg-danger text-light' : 'bg-warning text-dark'} small">
+                  ${a.alert_level}
+                </span>
+              </div>
+            </div>
+
+            <p class="small text-secondary mb-3" style="min-height: 40px; font-size: 0.82rem;">${a.message}</p>
+
+            ${progressPct > 0 ? `
+            <div class="mb-3">
+              <div class="d-flex justify-content-between small text-muted mb-1" style="font-size:0.7rem;">
+                <span>Detected Risk probability</span>
+                <span class="fw-bold text-dark">${progressPct.toFixed(1)}%</span>
+              </div>
+              <div class="risk-progress-bar">
+                <div class="progress-bar ${progressPct >= 70 ? 'bg-danger' : progressPct >= 40 ? 'bg-warning' : 'bg-success'}" 
+                     style="width: ${progressPct}%; height:100%;"></div>
+              </div>
+            </div>
+            ` : ''}
+
+            <div class="d-flex justify-content-between align-items-center pt-2 mt-auto border-top border-light">
+              <div class="small text-muted" style="font-size: 0.72rem;">
+                <i class="fa fa-user-md me-1"></i>Attending: <span class="fw-semibold text-dark">${a.assigned_doctor}</span>
+              </div>
+              <div class="small text-muted font-monospace" style="font-size: 0.7rem;">
+                ${a.created_at}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    grid.insertAdjacentHTML("beforeend", cardHTML);
+  });
+}
+
+function switchTab(tab, element) {
+  currentFilter = tab;
+  document.querySelectorAll(".alerts-tab-link").forEach(l => l.classList.remove("active"));
+  element.classList.add("active");
+  renderAlertsGrid();
+}
+</script>
+{% endblock %}

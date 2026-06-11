@@ -1,0 +1,186 @@
+{% extends "shared/base.html" %}
+{% block title %}Live Monitoring — Admin{% endblock %}
+{% block page_title %}Live Monitoring (Admin View){% endblock %}
+{% block content %}
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white border-0 fw-semibold pt-3 d-flex justify-content-between align-items-center">
+        <span><i class="fa fa-video me-2 text-primary"></i>Live Camera Feed</span>
+        <div class="d-flex gap-2">
+          <button id="startBtn" class="btn btn-sm btn-success" onclick="startCamera()"><i class="fa fa-play me-1"></i>Start</button>
+          <button id="stopBtn" class="btn btn-sm btn-danger d-none" onclick="stopCamera()"><i class="fa fa-stop me-1"></i>Stop</button>
+        </div>
+      </div>
+      <div class="card-body p-0">
+        <div id="videoContainer" style="position:relative;background:#111;min-height:360px;display:flex;align-items:center;justify-content:center;">
+          <video id="videoEl" autoplay muted playsinline style="width:100%;max-height:480px;display:none;"></video>
+          <canvas id="overlay" style="position:absolute;top:0;left:0;pointer-events:none;"></canvas>
+          <div id="placeholder" class="text-center text-white opacity-50 p-4">
+            <i class="fa fa-video fa-3x mb-3 d-block"></i>
+            <p>Click <b>Start</b> to begin live monitoring</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header bg-white border-0 fw-semibold pt-3">Detection Status</div>
+      <div class="card-body" id="detectionStatus">
+        <div class="text-muted small text-center py-3">Monitoring not active</div>
+      </div>
+    </div>
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header bg-white border-0 fw-semibold pt-3">Active Contacts</div>
+      <div class="card-body p-0" id="activeContacts" style="max-height:200px;overflow-y:auto;">
+        <div class="text-muted small text-center py-3">No active contacts</div>
+      </div>
+    </div>
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white border-0 fw-semibold pt-3 text-danger">
+        <i class="fa fa-bell me-1"></i>Recent Alerts
+      </div>
+      <div class="card-body p-0" id="alertsList" style="max-height:200px;overflow-y:auto;font-size:.78rem;">
+        {% for a in recent_alerts %}
+        <div class="p-2 border-bottom text-dark" style="background:#fee2e2; border-left:3px solid #dc3545; margin-bottom:4px; border-radius:4px;">
+          <div class="fw-bold text-danger d-flex justify-content-between">
+            <span>🚨 {{ a.get('alert_level', 'CRITICAL') }} ALERT</span>
+            <span>
+              {% if a.get('created_at') and a.get('created_at').strftime %}
+                {{ a.get('created_at').strftime('%H:%M:%S') }}
+              {% else %}
+                {{ (a.get('created_at')|string)[11:19] }}
+              {% endif %}
+            </span>
+          </div>
+          <div class="mt-1" style="font-size:.72rem;">{{ a.get('message') }}</div>
+        </div>
+        {% else %}
+        <div class="text-muted text-center py-3">No alerts generated yet</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+let stream=null, intervalId=null;
+const video=document.getElementById('videoEl');
+const overlay=document.getElementById('overlay');
+
+async function startCamera(){
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480}});
+    video.srcObject=stream;
+    video.style.display='block';
+    document.getElementById('placeholder').style.display='none';
+    document.getElementById('startBtn').classList.add('d-none');
+    document.getElementById('stopBtn').classList.remove('d-none');
+    overlay.width=640; overlay.height=480;
+    intervalId=setInterval(processFrame,800);
+  }catch(e){alert('Camera access denied: '+e.message);}
+}
+
+function stopCamera(){
+  if(stream) stream.getTracks().forEach(t=>t.stop());
+  clearInterval(intervalId);
+  video.style.display='none';
+  document.getElementById('placeholder').style.display='block';
+  document.getElementById('startBtn').classList.remove('d-none');
+  document.getElementById('stopBtn').classList.add('d-none');
+}
+
+async function processFrame(){
+  const canvas=document.createElement('canvas');
+  canvas.width=video.videoWidth||640; canvas.height=video.videoHeight||480;
+  canvas.getContext('2d').drawImage(video,0,0);
+  const b64=canvas.toDataURL('image/jpeg',0.7).split(',')[1];
+  try{
+    const r=await fetch('/doctor/api/process-frame',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({frame:b64})
+    });
+    const d=await r.json();
+    if(d.annotated_frame){
+      const img=new Image();
+      img.onload=()=>{
+        const ctx=overlay.getContext('2d');
+        ctx.clearRect(0,0,overlay.width,overlay.height);
+        ctx.drawImage(img,0,0,overlay.width,overlay.height);
+      };
+      img.src='data:image/jpeg;base64,'+d.annotated_frame;
+    }
+    updateStatus(d.persons||[]);
+    updateContacts(d.active_contacts||[]);
+    if(d.new_alerts && d.new_alerts.length > 0){
+      updateAlerts(d.new_alerts);
+    }
+  }catch(e){console.error(e);}
+}
+
+function updateStatus(persons){
+  const el=document.getElementById('detectionStatus');
+  if(!persons.length){el.innerHTML='<div class="text-muted small text-center py-2">No faces detected</div>';return;}
+  el.innerHTML=persons.map(p=>`
+    <div class="d-flex align-items-center gap-2 p-2 border-bottom">
+      <div class="rounded-circle d-flex align-items-center justify-content-center"
+           style="width:36px;height:36px;background:${p.mdr_status?'#fee2e2':'#d1fae5'};flex-shrink:0;">
+        <i class="fa fa-user" style="color:${p.mdr_status?'#dc3545':'#198754'};font-size:.8rem;"></i>
+      </div>
+      <div class="flex-grow-1">
+        <div class="fw-semibold small">${p.name}</div>
+        <div class="text-muted" style="font-size:.7rem;">${p.risk_level} Risk · ${p.confidence.toFixed(1)}%</div>
+      </div>
+      ${p.mdr_status?'<span class="badge badge-high" style="font-size:.65rem;">MDR+</span>':''}
+    </div>
+  `).join('');
+}
+
+function updateContacts(contacts){
+  const el=document.getElementById('activeContacts');
+  if(!contacts.length){el.innerHTML='<div class="text-muted small text-center py-3">No active contacts</div>';return;}
+  el.innerHTML=contacts.map(c=>{
+    const risk = c.exposure_risk || 'Low';
+    const badgeCls = risk === 'High' ? 'danger' : risk === 'Medium' ? 'warning text-dark' : 'success';
+    return `
+      <div class="p-2 border-bottom">
+        <div class="small fw-semibold d-flex justify-content-between align-items-center">
+          <span>⚠️ ${c.person1_name} ↔ ${c.person2_name}</span>
+          <span class="badge bg-${badgeCls} rounded-pill" style="font-size:0.65rem;">${risk} Risk</span>
+        </div>
+        <div class="text-muted d-flex justify-content-between mt-1" style="font-size:.7rem;">
+          <span>Duration: ${(c.duration||0).toFixed(1)}s</span>
+          <span>Score: ${(c.exposure_score||0).toFixed(1)}%</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function updateAlerts(newAlerts){
+  const el=document.getElementById('alertsList');
+  const placeholder=el.querySelector('.text-muted.text-center');
+  if(placeholder) el.innerHTML='';
+  
+  newAlerts.forEach(a=>{
+    const div=document.createElement('div');
+    div.className='p-2 border-bottom text-dark';
+    div.style.cssText='background:#fee2e2; border-left:3px solid #dc3545; margin-bottom:4px; border-radius:4px;';
+    div.innerHTML=`
+      <div class="fw-bold text-danger d-flex justify-content-between">
+        <span>🚨 ${a.alert_level || 'CRITICAL'} ALERT</span>
+        <span>${a.created_at}</span>
+      </div>
+      <div class="mt-1" style="font-size:.72rem;">${a.message}</div>
+    `;
+    el.insertBefore(div, el.firstChild);
+  });
+  
+  while(el.children.length>20){
+    el.removeChild(el.lastChild);
+  }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,139 @@
+{% extends "shared/base.html" %}
+{% block title %}Doctor Dashboard{% endblock %}
+{% block page_title %}Doctor Dashboard{% endblock %}
+{% block content %}
+<!-- Stats -->
+<div class="row g-3 mb-4">
+  {% set stats = [
+    ('My Patients',   total_assigned, 'fa-hospital-user','primary', '#dbeafe'),
+    ('MDR Positive',  mdr_count,      'fa-biohazard',    'danger',  '#fee2e2'),
+    ('High Risk',     high_risk,      'fa-triangle-exclamation','warning','#fef3c7'),
+    ('Active Alerts', recent_alerts|length, 'fa-bell', 'info','#e0f2fe'),
+  ] %}
+  {% for label, val, icon, color, bg in stats %}
+  <div class="col-6 col-md-3">
+    <div class="card stat-card h-100">
+      <div class="card-body d-flex align-items-center gap-3">
+        <div class="stat-icon" style="background:{{ bg }};color:var(--{{ color }})">
+          <i class="fa {{ icon }}"></i>
+        </div>
+        <div>
+          <div class="fs-3 fw-bold lh-1" id="stat-{{ loop.index }}">{{ val }}</div>
+          <div class="text-muted small">{{ label }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-5">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-white border-0 fw-semibold pt-3">Risk Distribution</div>
+      <div class="card-body d-flex align-items-center justify-content-center" style="height:200px;">
+        <canvas id="riskChart"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-7">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-white border-0 fw-semibold pt-3 d-flex justify-content-between align-items-center">
+        <span><i class="fa fa-bell text-primary me-2"></i>Active Alerts Stream</span>
+        <span class="badge bg-danger rounded-pill">{{ recent_alerts|length }}</span>
+      </div>
+      <div class="card-body p-3" style="max-height: 320px; overflow-y: auto;">
+        {% for a in recent_alerts %}
+        <div class="d-flex align-items-start gap-3 p-3 mb-2 rounded border" 
+             style="border-left: 4px solid {% if a.get('alert_level')=='CRITICAL' %}#ef4444{% else %}#f59e0b{% endif %} !important; background: #fafafa;">
+          <div class="d-flex align-items-center justify-content-center rounded-circle flex-shrink-0" 
+               style="width: 36px; height: 36px; background: {% if a.get('alert_level')=='CRITICAL' %}rgba(239, 68, 68, 0.08){% else %}rgba(245, 158, 11, 0.08){% endif %};">
+            <i class="fa {% if 'contact' in a.get('message','')|lower %}fa-people-arrows{% elif a.get('alert_level')=='CRITICAL' %}fa-triangle-exclamation{% else %}fa-biohazard{% endif %}" 
+               style="color: {% if a.get('alert_level')=='CRITICAL' %}#ef4444{% else %}#d97706{% endif %}; font-size: 0.95rem;"></i>
+          </div>
+          <div class="flex-grow-1 min-w-0">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <span class="small fw-bold text-dark text-truncate">{{ a.get('patient_name','—') }}</span>
+              <span class="badge {% if a.get('alert_level')=='CRITICAL' %}bg-danger{% else %}bg-warning text-dark{% endif %} px-2" style="font-size:0.65rem;">{{ a.get('alert_level') }}</span>
+            </div>
+            <div class="text-muted small text-break mb-1" style="font-size: 0.78rem;">{{ a.get('message','') }}</div>
+            <div class="text-muted font-monospace" style="font-size: 0.65rem;">
+              <i class="fa-regular fa-clock me-1"></i>{{ (a.get('created_at','')|string)[:16] if a.get('created_at') else '' }}
+            </div>
+          </div>
+          <div class="flex-shrink-0">
+            <button onclick="dismissAlert('{{ a._id }}')" class="btn btn-sm btn-outline-secondary py-1 px-2" style="font-size:.7rem; font-weight: 600;" title="Dismiss Alert">
+              <i class="fa fa-check"></i>
+            </button>
+          </div>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-5">
+          <i class="fa fa-bell-slash fa-2x mb-2 d-block opacity-25"></i>
+          <p class="small mb-0">No active alerts at this time.</p>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- My Patients -->
+<div class="card border-0 shadow-sm">
+  <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center pt-3">
+    <span class="fw-semibold">My Recent Patients</span>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('doctor.register_patient') }}" class="btn btn-sm btn-primary">
+        <i class="fa fa-user-plus me-1"></i>Register New
+      </a>
+      <a href="{{ url_for('doctor.my_patients') }}" class="btn btn-sm btn-outline-primary">View All</a>
+    </div>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-custom table-hover mb-0">
+        <thead><tr><th>Patient ID</th><th>Name</th><th>Ward</th><th>MDR Status</th><th>Registered</th><th>Action</th></tr></thead>
+        <tbody>
+          {% for p in my_patients %}
+          <tr>
+            <td class="fw-semibold text-primary">{{ p.get('patient_id','—') }}</td>
+            <td>{{ p.get('name','—') }}</td>
+            <td><span class="badge bg-light text-dark">{{ p.get('ward_type','—') }}</span></td>
+            <td>{% if p.get('mdr_status')==1 %}<span class="badge badge-high">MDR+</span>{% else %}<span class="badge badge-low">Negative</span>{% endif %}</td>
+            <td class="small text-muted">{{ (p.get('registration_date','')|string)[:10] if p.get('registration_date') else '' }}</td>
+            <td><a href="{{ url_for('doctor.patient_detail', patient_id=p.get('patient_id','')) }}" class="btn btn-xs btn-outline-primary" style="font-size:.75rem;padding:2px 8px;">View</a></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="text-center text-muted py-4">No patients assigned yet</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+const rd = {{ risk_dist|safe }};
+new Chart(document.getElementById('riskChart'),{
+  type:'doughnut',
+  data:{labels:['Low','Medium','High'],datasets:[{data:[rd.Low||0,rd.Medium||0,rd.High||0],backgroundColor:['#198754','#ffc107','#dc3545'],borderWidth:0}]},
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11}}}}}
+});
+
+async function dismissAlert(id){
+  if(!confirm('Dismiss this alert?')) return;
+  const r = await fetch(`/doctor/alerts/dismiss/${id}`, {method:'POST'});
+  if((await r.json()).success) location.reload();
+}
+
+// Live stats refresh
+setInterval(async()=>{
+  try{
+    const r=await fetch('/api/dashboard-stats');
+    const d=await r.json();
+    // update stat elements if needed
+  }catch(e){}
+},20000);
+</script>
+{% endblock %}
